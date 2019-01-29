@@ -148,6 +148,14 @@ cdef class Host:
     return cplatform.sg_host_get_available_speed(self.impl)
 
   @property
+  def cores(self):
+    """
+    Get number of cores on the host
+    """
+    self.__check_impl()
+    return cplatform.MSG_host_get_core_number(self.impl)
+
+  @property
   def data(self):
     """
     Get/set user data associated with this host.

@@ -34,6 +34,8 @@ cdef extern from "simgrid/simdag.h":
 
   double sg_host_speed(sg_host_t host);
   double sg_host_get_available_speed(sg_host_t host);
+  int sg_host_core_count(sg_host_t host);
+  int MSG_host_get_core_number(sg_host_t host);  # sg_host_core_count since v3.19
 
   xbt.xbt_dict_t sg_host_get_properties(sg_host_t host);
   const char* sg_host_get_property_value(sg_host_t host, const char* name);
