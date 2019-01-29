@@ -136,7 +136,7 @@ class StaticScheduler(Scheduler):
     if len(unscheduled) != len(self._simulation.tasks):
       raise Exception("static scheduler should not directly schedule tasks")
 
-    hosts_status = {h: True for h in self._simulation.hosts}
+    hosts_status = {h: h.cores for h in self._simulation.hosts}  # available cores on each host
 
     for t in self._simulation.tasks:
       t.watch(csimdag.TASK_STATE_DONE)
@@ -201,14 +201,14 @@ class StaticScheduler(Scheduler):
   def __update_host_status(self, hosts_status, changed):
     for t in changed.by_prop("kind", csimdag.TASK_KIND_COMM_E2E, True)[csimdag.TASK_STATE_DONE]:
       for h in t.hosts:
-        hosts_status[h] = True
+        hosts_status[h] += 1
 
   def __schedule_to_free_hosts(self, schedule, hosts_status):
     for host, tasks in schedule.items():
-      if tasks and hosts_status[host] == True:
+      while tasks and hosts_status[host]:
         task = tasks.pop(0)
         task.schedule(host)
-        hosts_status[host] = False
+        hosts_status[host] -= 1
 
 
 class DynamicScheduler(Scheduler):
