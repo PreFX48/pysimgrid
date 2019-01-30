@@ -185,3 +185,6 @@ cdef class Host:
     """
     if self.impl == NULL:
       raise RuntimeError("Host instance is NULL")
+
+  def __repr__(self):
+    return '<Host: {}>'.format(self.name)
