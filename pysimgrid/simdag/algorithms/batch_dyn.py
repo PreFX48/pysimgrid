@@ -41,7 +41,7 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
     def prepare(self, simulation):
         for h in simulation.hosts:
             h.data = {
-                "est": 0.
+                "est": {}
             }
         master_hosts = simulation.hosts.by_prop("name", self.MASTER_HOST_NAME)
         self._master_host = master_hosts[0] if master_hosts else None
@@ -60,17 +60,20 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
     def schedule(self, simulation, changed):
         clock = simulation.clock
 
-        free_hosts = set(self._exec_hosts)
+        available_cores = {host: host.cores for host in self._exec_hosts}
+        import ipdb; ipdb.set_trace(context=9)
+
         for task in simulation.tasks[csimdag.TaskState.TASK_STATE_RUNNING, csimdag.TaskState.TASK_STATE_SCHEDULED]:
             host = task.hosts[0]
-            free_hosts.discard(host)
+            if host in self._exec_hosts:
+                available_cores[host] -= 1
             if task.start_time > 0 and task not in self._started_tasks:
                 self._started_tasks.add(task)
-                host.data["est"] = task.start_time + task.get_eet(host)
+                host.data['est'][task] = task.start_time + task.get_eet(host)
 
-        host_est = {}
+        host_ests = {}
         for h in self._exec_hosts:
-            host_est[h] = h.data["est"]
+            host_ests[h] = sorted(h.data['est'].values())[-h.cores:]  # Finding est for (at least) all unfinished tasks
 
         tasks = simulation.tasks[csimdag.TaskState.TASK_STATE_SCHEDULABLE]
         num_tasks = len(tasks)
@@ -79,7 +82,8 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
         ECT = np.zeros((num_tasks, len(self._exec_hosts)))
         for t, task in enumerate(tasks):
             for h, host in enumerate(self._exec_hosts):
-                ECT[t][h] = self.get_ect(host_est[host], clock, task, host)
+                best_est = host_ests[host][0] if host_ests[host] else 0
+                ECT[t][h] = self.get_ect(best_est, clock, task, host)
 
         # build schedule
         task_idx = np.arange(num_tasks)
@@ -104,20 +108,25 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
             task = tasks[int(task_idx[t])]
             host = self._exec_hosts[h]
 
-            task_time = ect - host_est[host]
-            host_est[host] = ect
+            if host_ests[host]:
+                old_est = host_ests[host][0]
+                host_ests[host][0] = ect
+            else:
+                old_est = 0
+                host_ests[host].append(ect)
+            host_ests[host].sort()
 
-            if host in free_hosts:
+            if available_cores[host]:
                 task.schedule(host)
                 # logging.info("%s -> %s" % (task.name, host.name))
-                host.data["est"] = ect
-                free_hosts.remove(host)
-                if len(free_hosts) == 0:
+                host.data['est'][task] = ect
+                available_cores[host] -= 1
+                if not any(available_cores.values()):
                     break
 
             task_idx = np.delete(task_idx, t)
             ECT = np.delete(ECT, t, 0)
-            ECT[:,h] += task_time
+            ECT[:,h] += host_ests[host][0] - old_est
 
     def get_ect(self, est, clock, task, host):
         if (task, host) in self._estimate_cache:

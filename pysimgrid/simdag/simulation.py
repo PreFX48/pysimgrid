@@ -293,6 +293,12 @@ class _InstanceList(object):
     """
     return str(self._list)
 
+  def __repr__(self):
+    """
+    Sequence interface implementation.
+    """
+    return repr(self._list)
+
 
 class _TaskList(_InstanceList):
   """
