@@ -269,14 +269,17 @@ class StaticScheduler(Scheduler):
                                         DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
           self.check_and_schedule_parent_transfers(t, task_to_host)
       for host, tasks in schedule.items():
-        while tasks and (hosts_status[host] or self._task_exec_mode == TaskExecutionMode.PARALLEL):
-          task = tasks[0]
+        scheduled_tasks = set()
+        for task in tasks:
+          if not hosts_status[host] and not self._task_exec_mode == TaskExecutionMode.PARALLEL:
+            break
           if self._data_transfer_mode == DataTransferMode.LAZY_PARENTS:
             if not all(p.parents[0].state == csimdag.TASK_STATE_DONE for p in task.parents):
               continue
-          tasks.pop(0)
+          scheduled_tasks.add(task)
           task.schedule(host)
           hosts_status[host] -= 1
+        schedule[host] = [task for task in tasks if task not in scheduled_tasks]
       changed = self._simulation.simulate()
       if not changed:
         break
