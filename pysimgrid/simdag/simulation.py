@@ -170,6 +170,12 @@ class Simulation(object):
     """
     csimdag.add_dependency(src_task, dst_task)
 
+  def remove_dependency(self, src_task, dst_task):
+    """
+    Remove dependency between given tasks, if exists.
+    """
+    csimdag.remove_dependency(src_task, dst_task)
+
   def add_task(self, name, amount):
     """
     Add computational task.

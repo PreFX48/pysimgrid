@@ -310,6 +310,121 @@ class StaticScheduler(Scheduler):
     self._check_done()
     self.__total_time = time.time() - start_time
 
+  def run_new(self):
+    start_time = time.time()
+    schedule = self.get_schedule(self._simulation)
+    task_to_host = {}
+    for host, tasks in schedule.items():
+      for task in tasks:
+        task_to_host[task] = host
+
+    self.__scheduler_time = time.time() - start_time
+    self._log.debug("Scheduling time: %f", self.__scheduler_time)
+    if not isinstance(schedule, (dict, tuple)):
+      raise Exception("'get_schedule' must return a dictionary or a tuple")
+    if isinstance(schedule, tuple):
+      if len(schedule) != 2 or not isinstance(schedule[0], dict) or not isinstance(schedule[1], float):
+        raise Exception("'get_schedule' returned tuple should have format (<schedule>, <expected_makespan>)")
+      schedule, self.__expected_makespan = schedule
+      self._log.debug("Expected makespan: %f", self.__expected_makespan)
+    for host, task_list in schedule.items():
+      if not (isinstance(host, cplatform.Host) and isinstance(task_list, list)):
+        raise Exception("'get_schedule' must return a dictionary Host:List_of_tasks")
+
+    unscheduled = self._simulation.tasks[csimdag.TASK_STATE_NOT_SCHEDULED, csimdag.TASK_STATE_SCHEDULABLE]
+    if set(itertools.chain.from_iterable(schedule.values())) != set(self._simulation.tasks):
+      raise Exception("some tasks are left unscheduled by static algorithm: {}".format([t.name for t in unscheduled]))
+    if len(unscheduled) != len(self._simulation.tasks):
+      raise Exception("static scheduler should not directly schedule tasks")
+
+    if self._data_transfer_mode in (DataTransferMode.EAGER, DataTransferMode.PARENTS,DataTransferMode.PREFETCH,
+                                    DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
+      new_tasks = []
+      for comm_task in self._simulation._tasks:
+        dummy_task = self._simulation.add_task('dummy_transfer_task_{}'.format(comm_task.name), 0)
+        comp_task = comm_task.children[0]
+        self._simulation.remove_dependency(comm_task, comp_task)
+        self._simulation.add_dependency(comm_task, dummy_task)
+        self._simulation.add_dependency(dummy_task, comp_task)
+        new_tasks.append(dummy_task)
+      self._simulation.tasks.extend(new_tasks)
+
+    if self._data_transfer_mode in [DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT]:
+      data_transfers = []
+      for host, tasks in schedule.items():
+        for pos, task in enumerate(tasks):
+          if self._data_transfer_mode == DataTransferMode.QUEUE:
+            # build a list of host inbound data transfers
+            for transfer_task in task.parents:
+              data_transfers.append((transfer_task, pos))
+          elif self._data_transfer_mode == DataTransferMode.QUEUE_ECT:
+            # build a list of host inbound data transfers
+            for transfer_task in task.parents:
+              producer = transfer_task.parents[0].parents[0]
+              data_transfers.append((transfer_task, (producer.data["ect"], pos)))
+
+        if self._data_transfer_mode in [DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT]:
+          # form a queue from host inbound data transfers
+          data_transfers.sort(key=lambda t: t[1])
+          prev_comm = None
+          for comm, _ in data_transfers:
+            if prev_comm is not None:
+              self._simulation.add_dependency(prev_comm, comm)
+            prev_comm = comm
+
+    if self._data_transfer_mode == DataTransferMode.PREFETCH:
+      for host, tasks in schedule.items():
+        for prev, nxt in zip(tasks[:-1], tasks[1:]):
+          for prev_comm in prev.parents:
+            for nxt_comm in nxt.parents:
+              self._simulation.add_dependency(prev_comm, nxt_comm)
+
+    hosts_status = {h: h.cores for h in self._simulation.hosts}
+    for t in self._simulation.tasks:
+      t.watch(csimdag.TASK_STATE_DONE)
+    changed = self._simulation.tasks.by_func(lambda t: False)
+    while True:
+      for t in changed.by_prop("kind", csimdag.TASK_KIND_COMM_E2E, negate=True)[csimdag.TASK_STATE_DONE]:
+        if t.name.startswith('dummy_transfer_task_'):
+          continue  # special dummy tasks do not utilize CPU
+        for h in t.hosts:
+          hosts_status[h] += 1
+        if self._data_transfer_mode in (DataTransferMode.EAGER, DataTransferMode.PARENTS, DataTransferMode.PREFETCH,
+                                        DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
+          self.check_and_schedule_parent_transfers(t, task_to_host)
+      for host, tasks in schedule.items():
+        while tasks and (hosts_status[host] or self._task_exec_mode == TaskExecutionMode.PARALLEL):
+          task = tasks[0]
+          if self._data_transfer_mode == DataTransferMode.LAZY_PARENTS:
+            if not all(p.parents[0].state == csimdag.TASK_STATE_DONE for p in task.parents):
+              continue
+          tasks.pop(0)
+          task.schedule(host)
+          hosts_status[host] -= 1
+      changed = self._simulation.simulate()
+      if not changed:
+        break
+
+    self._simulation.simulate()
+    self._check_done()
+    self.__total_time = time.time() - start_time
+
+  def check_and_schedule_parent_transfers(self, task, task_to_host):
+    for e2e in task.children:
+      if self._data_transfer_mode == DataTransferMode.PARENTS:
+        consumer = e2e.children[0].children[0]
+        consumer_transfers = [x.parents[0] for x in consumer.parents]
+        consumer_parents = [x.parents[0] for x in consumer_transfers]
+        if all(x.state == csimdag.TASK_STATE_DONE for x in consumer_parents):
+          for x, consumer_task in zip(consumer_transfers, consumer_parents):
+            host = task_to_host[consumer_task]
+            x.schedule(host)
+      else:
+        transfer_task = e2e.children[0]
+        consumer_task = transfer_task.children[0]
+        host = task_to_host[consumer_task]
+        transfer_task.schedule(host)
+
   @abc.abstractmethod
   def get_schedule(self, simulation):
     """

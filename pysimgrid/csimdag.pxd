@@ -104,6 +104,7 @@ cdef extern from "simgrid/simdag.h":
   #void SD_task_schedulel(SD_task_t task, int count, ...); # disable vararg signature
 
   void SD_task_dependency_add(const char* name, void* data, SD_task_t src, SD_task_t dst);
+  void SD_task_dependency_remove(SD_task_t src, SD_task_t dst);
 
 cdef class Task:
   cdef SD_task_t impl

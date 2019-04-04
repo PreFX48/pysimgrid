@@ -185,6 +185,18 @@ def add_dependency(csimdag.Task src, csimdag.Task dst):
     csimdag.SD_task_dependency_add(utf8name, NULL, src.impl, dst.impl)
 
 
+def remove_dependency(csimdag.Task src, csimdag.Task dst):
+  """
+  Remove dependency between given tasks, if exists.
+  """
+  cdef bytes utf8name = common.utf8_string("scheduled-after")
+  parents = set()
+  for parent in dst.parents:
+    parents.add(parent.name)
+  if src.name in parents:
+    csimdag.SD_task_dependency_remove(src.impl, dst.impl)
+
+
 def add_task(name, amount):
   """
   Add computational task to SimDAG graph.
