@@ -191,6 +191,8 @@ class Simulation(object):
     """
     timetable_per_host = {}
     for task in self.tasks:
+      if task.name.startswith('__DUMMY__TRANSFER__TASK__'):
+        continue
       host = task.hosts
       assert(len(host) == 1)
       if host[0].name not in timetable_per_host:

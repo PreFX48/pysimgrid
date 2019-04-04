@@ -186,7 +186,7 @@ class StaticScheduler(Scheduler):
 
   def run(self):
     start_time = time.time()
-    schedule = self.get_schedule(self._simulation)
+    schedule, _ = self.get_schedule(self._simulation)
     task_to_host = {}
     for host, tasks in schedule.items():
       for task in tasks:
@@ -215,13 +215,15 @@ class StaticScheduler(Scheduler):
                                     DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
       new_tasks = []
       for comm_task in self._simulation._tasks:
-        dummy_task = self._simulation.add_task('dummy_transfer_task_{}'.format(comm_task.name), 0)
+        if comm_task.kind != csimdag.TaskKind.TASK_KIND_COMM_E2E:
+          continue
+        dummy_task = self._simulation.add_task('__DUMMY__TRANSFER__TASK__{}'.format(comm_task.name), 0)
         comp_task = comm_task.children[0]
         self._simulation.remove_dependency(comm_task, comp_task)
         self._simulation.add_dependency(comm_task, dummy_task)
         self._simulation.add_dependency(dummy_task, comp_task)
         new_tasks.append(dummy_task)
-      self._simulation.tasks.extend(new_tasks)
+      self._simulation._tasks.extend(new_tasks)
 
     if self._data_transfer_mode in [DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT]:
       data_transfers = []
@@ -259,7 +261,7 @@ class StaticScheduler(Scheduler):
     changed = self._simulation.tasks.by_func(lambda t: False)
     while True:
       for t in changed.by_prop("kind", csimdag.TASK_KIND_COMM_E2E, negate=True)[csimdag.TASK_STATE_DONE]:
-        if t.name.startswith('dummy_transfer_task_'):
+        if t.name.startswith('__DUMMY__TRANSFER__TASK__'):
           continue  # special dummy tasks do not utilize CPU
         for h in t.hosts:
           hosts_status[h] += 1
@@ -287,12 +289,14 @@ class StaticScheduler(Scheduler):
     for e2e in task.children:
       if self._data_transfer_mode == DataTransferMode.PARENTS:
         consumer = e2e.children[0].children[0]
-        consumer_transfers = [x.parents[0] for x in consumer.parents]
-        consumer_parents = [x.parents[0] for x in consumer_transfers]
+        consumer_transfers = [x for x in consumer.parents]
+        consumer_parents = [x.parents[0].parents[0] for x in consumer_transfers]
         if all(x.state == csimdag.TASK_STATE_DONE for x in consumer_parents):
-          for x, consumer_task in zip(consumer_transfers, consumer_parents):
+          for transfer_task in consumer_transfers:
+            consumer_task = transfer_task.children[0]
             host = task_to_host[consumer_task]
-            x.schedule(host)
+            if transfer_task.state < csimdag.TASK_STATE_SCHEDULED:
+              transfer_task.schedule(host)
       else:
         transfer_task = e2e.children[0]
         consumer_task = transfer_task.children[0]
