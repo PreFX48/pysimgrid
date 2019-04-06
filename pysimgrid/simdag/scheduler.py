@@ -186,11 +186,8 @@ class StaticScheduler(Scheduler):
 
   def run(self):
     start_time = time.time()
-    schedule, _ = self.get_schedule(self._simulation)
-    task_to_host = {}
-    for host, tasks in schedule.items():
-      for task in tasks:
-        task_to_host[task] = host
+
+    schedule = self.get_schedule(self._simulation)
 
     self.__scheduler_time = time.time() - start_time
     self._log.debug("Scheduling time: %f", self.__scheduler_time)
@@ -211,9 +208,13 @@ class StaticScheduler(Scheduler):
     if len(unscheduled) != len(self._simulation.tasks):
       raise Exception("static scheduler should not directly schedule tasks")
 
+    task_to_host = {}
+    for host, tasks in schedule.items():
+      for task in tasks:
+        task_to_host[task] = host
+
     if self._data_transfer_mode in (DataTransferMode.EAGER, DataTransferMode.PARENTS,DataTransferMode.PREFETCH,
                                     DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
-      new_tasks = []
       for comm_task in self._simulation._tasks:
         if comm_task.kind != csimdag.TaskKind.TASK_KIND_COMM_E2E:
           continue
@@ -222,8 +223,6 @@ class StaticScheduler(Scheduler):
         self._simulation.remove_dependency(comm_task, comp_task)
         self._simulation.add_dependency(comm_task, dummy_task)
         self._simulation.add_dependency(dummy_task, comp_task)
-        new_tasks.append(dummy_task)
-      self._simulation._tasks.extend(new_tasks)
 
     if self._data_transfer_mode in [DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT]:
       data_transfers = []
@@ -239,14 +238,18 @@ class StaticScheduler(Scheduler):
               producer = transfer_task.parents[0].parents[0]
               data_transfers.append((transfer_task, (producer.data["ect"], pos)))
 
-        if self._data_transfer_mode in [DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT]:
-          # form a queue from host inbound data transfers
-          data_transfers.sort(key=lambda t: t[1])
-          prev_comm = None
-          for comm, _ in data_transfers:
-            if prev_comm is not None:
-              self._simulation.add_dependency(prev_comm, comm)
-            prev_comm = comm
+      # form a queue from host inbound data transfers
+      data_transfers.sort(key=lambda t: t[1])
+      data_transfers_per_host = {
+        host: [t for t, _ in data_transfers if task_to_host[t.children[0]] == host]
+        for host in schedule.keys()
+      }
+      for transfers in data_transfers_per_host.values():
+        prev_comm = None
+        for comm in transfers:
+          if prev_comm is not None:
+            self._simulation.add_dependency(prev_comm, comm)
+          prev_comm = comm
 
     if self._data_transfer_mode == DataTransferMode.PREFETCH:
       for host, tasks in schedule.items():
