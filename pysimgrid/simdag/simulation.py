@@ -189,21 +189,27 @@ class Simulation(object):
     """
     Check whether task executions overlap on hosts or not.
     """
+    cores = {}
     timetable_per_host = {}
     for task in self.tasks:
       if task.name.startswith('__DUMMY__TRANSFER__TASK__'):
         continue
       host = task.hosts
       assert(len(host) == 1)
+      cores[host[0].name] = host[0].cores
       if host[0].name not in timetable_per_host:
         timetable_per_host[host[0].name] = []
-      timetable_per_host[host[0].name].append((task.start_time, task.finish_time))
+      timetable_per_host[host[0].name].append((task.finish_time, 'finish'))
+      timetable_per_host[host[0].name].append((task.start_time, 'start'))
     for host in timetable_per_host:
-      last_ended = -1
-      for task_time in sorted(timetable_per_host[host], key=operator.itemgetter(0)):
-        if task_time[0] < last_ended:
+      tasks = 0
+      for _, event_type in sorted(timetable_per_host[host]):
+        if event_type == 'start':
+          tasks += 1
+        elif event_type == 'finish':
+          tasks -= 1
+        if tasks > cores[host]:
           return False
-        last_ended = task_time[1]
     return True
 
   def __enter__(self):
@@ -261,7 +267,7 @@ class Simulation(object):
       if self.sanity_check():
         self._logger.debug("Sanity check PASSED")
       else:
-        raise Exception("Sanity check FAILED (task executions overlap on hosts!)")
+        raise Exception("Sanity check FAILED (number of simultaneous executions exceeds the number of available cores!)")
     else:
       self._logger.debug("Sanity check SKIPPED (task execution mode is PARALLEL)")
 
