@@ -501,7 +501,7 @@ cpdef heft_schedule(object nxgraph, PlatformModel platform_model, SchedulerState
       else: # classic HEFT, i.e. EAGER data transfers
         est = platform_model.est(host, dict(nxgraph.pred[task]), state)
         eet = platform_model.eet(task, host)
-      pos, start, finish = timesheet_insertion(timesheet, est, eet)
+      pos, start, finish = timesheet_insertion(timesheet, host.cores, est, eet)
       # strange key order to ensure stable sorting:
       #  first sort by ECT (as HEFT requires)
       #  if equal - sort by host speed
@@ -551,7 +551,7 @@ def schedulable_order(object nxgraph, dict ranking):
   return order
 
 
-cpdef timesheet_insertion(list timesheet, double est, double eet):
+cpdef timesheet_insertion(list timesheet, int cores, double est, double eet):
   """
   Evaluate a earliest possible insertion into a given timesheet.
 
@@ -565,7 +565,7 @@ cpdef timesheet_insertion(list timesheet, double est, double eet):
   """
   # implementation may look a bit ugly, but it's for performance reasons
   cdef int insert_index = len(timesheet)
-  cdef double start_time = timesheet[-1][2] if timesheet else 0
+  cdef double start_time = min([task[2] for task in timesheet[-cores:]]) if timesheet else 0
   cdef double slot_start
   cdef double slot_end
   cdef double slot

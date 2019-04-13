@@ -140,7 +140,7 @@ class SimHEFT(scheduler.StaticScheduler):
         est = platform_model.est(host, dict(nxgraph.pred[task]), current_state)
         eet = platform_model.eet(task, host)
         # 'correct' way
-        pos, start, finish = cscheduling.timesheet_insertion(timesheet, est, eet)
+        pos, start, finish = cscheduling.timesheet_insertion(timesheet, host.cores, est, eet)
         # TODO: try aggressive inserts
         current_state.update(task, host, pos, start, finish)
         with tempfile.NamedTemporaryFile("w", suffix=".dot") as temp_file:

@@ -68,7 +68,7 @@ class Lookahead(scheduler.StaticScheduler):
         temp_state = state.copy()
         est = platform_model.est(host, dict(nxgraph.pred[task]), state)
         eet = platform_model.eet(task, host)
-        pos, start, finish = cscheduling.timesheet_insertion(timesheet, est, eet)
+        pos, start, finish = cscheduling.timesheet_insertion(timesheet, host.cores, est, eet)
         temp_state.update(task, host, pos, start, finish)
         cscheduling.heft_schedule(nxgraph, platform_model, temp_state, ordered_tasks[(idx + 1):],
                                   self._data_transfer_mode.name)

@@ -88,7 +88,7 @@ class HCPT(StaticScheduler):
           continue
         est = platform_model.est(host, dict(nxgraph.pred[task]), state)
         eet = platform_model.eet(task, host)
-        pos, start, finish = cscheduling.timesheet_insertion(timesheet, est, eet)
+        pos, start, finish = cscheduling.timesheet_insertion(timesheet, host.cores, est, eet)
         # strange key order to ensure stable sorting:
         #  first sort by ECT
         #  if equal - sort by host speed

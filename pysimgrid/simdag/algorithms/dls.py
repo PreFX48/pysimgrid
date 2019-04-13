@@ -116,7 +116,7 @@ class DLS(StaticScheduler):
         est = platform_model.est(host_to_schedule, dict(nxgraph.pred[task_to_schedule]), state)
         eet = platform_model.eet(task_to_schedule, host_to_schedule)
         timesheet = state.timetable[host_to_schedule]
-        pos, start, finish = cscheduling.timesheet_insertion(timesheet, est, eet)
+        pos, start, finish = cscheduling.timesheet_insertion(timesheet, host.cores, est, eet)
         state.update(task_to_schedule, host_to_schedule, pos, start, finish)
 
       new_tasks = set()
@@ -149,7 +149,7 @@ class DLS(StaticScheduler):
     est = platform_model.est(host, dict(nxgraph.pred[task]), state)
     eet = platform_model.eet(task, host)
     timesheet = state.timetable[host]
-    pos, start, finish = cscheduling.timesheet_insertion(timesheet, est, eet)
+    pos, start, finish = cscheduling.timesheet_insertion(timesheet, host.cores, est, eet)
     return sl[task] + (aec[task] - task.amount / host.speed) - start
 
   @classmethod
