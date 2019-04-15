@@ -568,22 +568,28 @@ cpdef timesheet_insertion(list timesheet, int cores, double est, double eet):
   cdef double start_time = min([task[2] for task in timesheet[-cores:]]) if timesheet else 0
   cdef double slot_start
   cdef double slot_end
+  cdef int slot_index = 0
   cdef double slot
-  cdef tuple insertion = (None, 0, 0)
-  cdef tuple t1
-  cdef tuple t2
+  cdef list beginnings = [(task[1], 1) for task in timesheet]
+  cdef list finishes = [(task[2], 0) for task in timesheet]
+  cdef list events = sorted(finishes + beginnings)
+  cdef int available_cores = cores
 
-  if timesheet:
-    for idx in range(len(timesheet)):
-      t1 = timesheet[idx - 1] if idx else insertion
-      t2 = timesheet[idx]
-      slot_end = t2[1]
-      slot_start = t1[2]
-      slot = slot_end - max(slot_start, est)
-      if slot > eet:
-        insert_index = idx
-        start_time = t1[2]
-        break
+  for event in events:
+    if event[1] == 0:
+      available_cores += 1
+      if available_cores == 1:
+        slot_start = event[0]
+    else:
+      available_cores -= 1
+      if available_cores == 0:
+        slot_end = event[0]
+        slot = slot_end - max(slot_start, est)
+        if slot > eet:
+          insert_index = slot_index
+          start_time = slot_start
+          break
+      slot_index += 1
 
   start_time = max(start_time, est)
   return (insert_index, start_time, (start_time + eet))
