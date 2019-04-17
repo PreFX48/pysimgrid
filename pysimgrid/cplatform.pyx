@@ -75,6 +75,12 @@ def route_bandwidth(Host src not None, Host dst not None):
   return cplatform.SD_route_get_bandwidth(src.impl, dst.impl)
 
 
+def link_bandwidth(str name not None):
+  cdef cplatform.SD_link_t link = cplatform.sg_link_by_name(name)
+  cdef bandwidth = cplatform.sg_link_bandwidth(link)
+  return bandwidth
+
+
 cdef class Host:
   """
   Representation of a platform's host.
