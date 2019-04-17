@@ -92,9 +92,10 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
                 for link in cplatform.route(h1, h2):
                     links.add(link)
         self._link_transmissions = {link: 0 for link in links}
+        self._first_iteration = True
 
     def schedule(self, simulation, changed):
-        has_comp_tasks = True
+        has_comp_tasks = False
         for task in changed:
             if task.kind == csimdag.TASK_KIND_COMM_E2E:
                 if len(task.hosts) == 1:
@@ -107,8 +108,9 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
                         self._link_transmissions[link] -= 1
             elif task.kind == csimdag.TASK_KIND_COMP_SEQ:
                 has_comp_tasks = True
-        if not has_comp_tasks:
+        if not has_comp_tasks and not self._first_iteration:
             return
+        self._first_iteration = False
 
         clock = simulation.clock
 
