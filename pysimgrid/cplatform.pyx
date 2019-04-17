@@ -75,8 +75,9 @@ def route_bandwidth(Host src not None, Host dst not None):
   return cplatform.SD_route_get_bandwidth(src.impl, dst.impl)
 
 
-def link_bandwidth(str name not None):
-  cdef cplatform.SD_link_t link = cplatform.sg_link_by_name(name)
+def link_bandwidth(name):
+  cdef bytes utf8name = common.utf8_string(name)
+  cdef cplatform.SD_link_t link = cplatform.sg_link_by_name(utf8name)
   cdef bandwidth = cplatform.sg_link_bandwidth(link)
   return bandwidth
 
