@@ -25,7 +25,7 @@ from ... import csimdag
 from ... import cplatform
 
 
-class DynamicBatchScheduler(scheduler.DynamicScheduler):
+class EnhancedBatchScheduler(scheduler.DynamicScheduler):
     """
     Batch-mode heuristic base implementation.
 
@@ -200,7 +200,7 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
 
 
 
-class DynamicBatchMin(DynamicBatchScheduler):
+class EnhancedBatchMin(EnhancedBatchScheduler):
     """
     Batch-mode MinMin scheduler.
 
@@ -214,7 +214,7 @@ class DynamicBatchMin(DynamicBatchScheduler):
         return min(possible_schedules, key=lambda s: (s[2], s[0]))[:-1]
 
 
-class DynamicBatchMax(DynamicBatchScheduler):
+class EnhancedBatchMax(EnhancedBatchScheduler):
     """
     Batch-mode MaxMin scheduler.
 
@@ -228,7 +228,7 @@ class DynamicBatchMax(DynamicBatchScheduler):
         return max(possible_schedules, key=lambda s: (s[2], s[0]))[:-1]
 
 
-class DynamicBatchSufferage(DynamicBatchScheduler):
+class EnhancedBatchSufferage(EnhancedBatchScheduler):
     """
     Batch-mode Sufferage scheduler.
 
