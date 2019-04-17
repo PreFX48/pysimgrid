@@ -97,6 +97,8 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
         has_comp_tasks = True
         for task in changed:
             if task.kind == csimdag.TASK_KIND_COMM_E2E:
+                if len(task.hosts) == 1:
+                    continue
                 route = cplatform.route(task.hosts[0], task.hosts[1])
                 for link in route:
                     if task.state == csimdag.TASK_STATE_RUNNING:
