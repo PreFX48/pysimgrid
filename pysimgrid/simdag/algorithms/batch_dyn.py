@@ -61,7 +61,11 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
         clock = simulation.clock
 
         free_hosts = set(self._exec_hosts)
-        for task in simulation.tasks[csimdag.TaskState.TASK_STATE_RUNNING, csimdag.TaskState.TASK_STATE_SCHEDULED]:
+        for task in simulation.tasks[
+            csimdag.TaskState.TASK_STATE_RUNNING,
+            csimdag.TaskState.TASK_STATE_SCHEDULED,
+            csimdag.TaskState.TASK_STATE_RUNNABLE
+        ]:
             host = task.hosts[0]
             free_hosts.discard(host)
             if task.start_time > 0 and task not in self._started_tasks:

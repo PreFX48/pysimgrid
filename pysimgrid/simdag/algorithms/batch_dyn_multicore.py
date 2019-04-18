@@ -62,7 +62,11 @@ class DynamicBatchScheduler(scheduler.DynamicScheduler):
 
         available_cores = {host: host.cores for host in self._exec_hosts}
 
-        for task in simulation.tasks[csimdag.TaskState.TASK_STATE_RUNNING, csimdag.TaskState.TASK_STATE_SCHEDULED]:
+        for task in simulation.tasks[
+            csimdag.TaskState.TASK_STATE_RUNNING,
+            csimdag.TaskState.TASK_STATE_SCHEDULED,
+            csimdag.TaskState.TASK_STATE_RUNNABLE
+        ]:
             host = task.hosts[0]
             if host in self._exec_hosts:
                 available_cores[host] -= 1
