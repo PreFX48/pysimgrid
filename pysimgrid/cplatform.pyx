@@ -78,8 +78,15 @@ def route_bandwidth(Host src not None, Host dst not None):
 def link_bandwidth(name):
   cdef bytes utf8name = common.utf8_string(name)
   cdef cplatform.SD_link_t link = cplatform.sg_link_by_name(utf8name)
-  cdef bandwidth = cplatform.sg_link_bandwidth(link)
+  cdef double bandwidth = cplatform.sg_link_bandwidth(link)
   return bandwidth
+
+
+def link_latency(name):
+  cdef bytes utf8name = common.utf8_string(name)
+  cdef cplatform.SD_link_t link = cplatform.sg_link_by_name(utf8name)
+  cdef double latency = cplatform.sg_link_latency(link)
+  return latency
 
 
 cdef class Host:

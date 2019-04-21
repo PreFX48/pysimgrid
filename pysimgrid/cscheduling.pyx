@@ -222,6 +222,28 @@ cdef class PlatformModel(object):
         result = parent_time
     return result
 
+  cpdef enhanced_est(self, cplatform.Host host, dict parents, SchedulerState state):
+    """
+    Calculate an earliest start time for a given task while also taking into account network contention
+    """
+    cdef dict task_states = state._task_states
+    cdef csimdag.Task parent
+    cdef dict edge
+
+    cdef double transfer_finish_time
+    cdef list transfers = [
+      {
+        'name': edge['name'],
+        'start_time': task_states[parent]['ect'],
+        'src': task_states[parent]['host'],
+        'dst': host,
+        'amount': edge['weight'],
+      }
+      for parent, edge in parents.items()
+    ]
+    transfer_finish_time = state.get_transfer_time(transfers, True)
+    return transfer_finish_time
+
   cpdef max_ect(self, list tasks, SchedulerState state):
     """
     Get max ECT (estimated completion time) for given tasks.
@@ -269,6 +291,28 @@ cdef class PlatformModel(object):
         result = comm_time
     return result
 
+  cpdef enhanced_max_comm_time(self, cplatform.Host host, dict tasks, SchedulerState state):
+    """
+    Calculate an earliest start time for a given task while also taking into account network contention
+    """
+    cdef dict task_states = state._task_states
+    cdef csimdag.Task parent
+    cdef dict edge
+
+    cdef double transfer_duration
+    cdef list transfers = [
+      {
+        'name': edge['name'],
+        'start_time': task_states[parent]['ect'],
+        'src': task_states[parent]['host'],
+        'dst': host,
+        'amount': edge['weight'],
+      }
+      for parent, edge in tasks.items()
+    ]
+    transfer_duration = state.get_transfer_time(transfers, False)
+    return transfer_duration
+
   def host_idx(self, cplatform.Host host):
     return self._host_map[host]
 
@@ -281,18 +325,118 @@ cdef class SchedulerState(object):
   """
   cdef dict _task_states
   cdef dict _timetable
+  cdef set _links
+  cdef dict _transfer_tasks
+  cdef dict _transfer_task_by_name
 
-  def __init__(self, simulation=None, task_states=None, timetable=None):
+  def __init__(self, simulation=None, task_states=None, timetable=None, links=None, transfer_tasks=None):
     if simulation:
       if task_states or timetable:
         raise Exception("simulation is provided, initial state is not expected")
       self._task_states = {task: {"ect": numpy.nan, "host": None} for task in simulation.tasks}
       self._timetable = {host: [] for host in simulation.hosts}
+      self._links = set()
+      for h1 in simulation.hosts:
+        for h2 in simulation.hosts:
+          for link in cplatform.route(h1, h2):
+            self._links.add(link)
+      self._transfer_tasks = {task: None for task in simulation.connections}
+      self._transfer_task_by_name = {task.name: task for task in self._transfer_tasks}
     else:
-      if not task_states or not timetable:
+      if not task_states or not timetable or not links or not transfer_tasks:
         raise Exception("initial state must be provided")
       self._task_states = task_states
       self._timetable = timetable
+      self._links = links
+      self._transfer_tasks = transfer_tasks
+      self._transfer_task_by_name = {task.name: task for task in self._transfer_tasks}
+
+  def get_transfer_time(self, new_tasks, absolute):
+    # TODO: тут нужен Cython
+    """
+    Args:
+      new_tasks:  [{'name': str, 'start_time': float, 'src': Host, 'dst': Host, 'amount': float}]
+      absolute: True - время с момента начала выполнения workflow, False - с момента начала передачи данных
+    Returns:
+      estimated finish time of all provided transfer tasks in total
+    """
+    # TODO: сейчас мы будем считать, что канал всегда делится между потоками поровну
+    # TODO: надо изучить, что делать в случае, когда поток не может полностью заиспользовать свою долю канала
+    max_start_time = max(task['start_time'] for task in new_tasks)
+    new_tasks = [task for task in new_tasks if task['src'] != task['dst']]
+    if not new_tasks:
+      if absolute:
+        return max_start_time
+      else:
+        return 0.0
+
+    transfer_tasks = sorted(
+      [(t, info) for (t, info) in self._transfer_tasks.items() if info is not None and info[1] != info[2]],
+      key=lambda x: x[1][0]
+    )
+    task_to_links = {task['name']: cplatform.route(task['src'], task['dst']) for task in new_tasks}
+    for task, task_info in transfer_tasks:
+      if task_info is not None and task_info[1] != task_info[2]:
+        task_to_links[task.name] = cplatform.route(task_info[1], task_info[2])
+    link_usage = {name: 0 for name in self._links}
+    link_bandwidth = {name: cplatform.link_bandwidth(name) for name in self._links}
+    # link_latency = {name: cplatform.link_latency(name) for name in links}  # TODO: не игнорить latency
+
+    cur_time = 0
+    transfer_tasks_idx = 0
+    to_transfer = {}
+    unfinished_tasks = {task['name'] for task in new_tasks}
+    unscheduled_tasks = {task['name'] for task in new_tasks}
+    if not absolute:
+      results = {}
+      task_to_start_time = {task['name']: task['start_time'] for task in new_tasks}
+
+    while True:
+      selector = MinSelector()
+      if transfer_tasks_idx < len(transfer_tasks):
+        task, task_info = transfer_tasks[transfer_tasks_idx]
+        selector.update((task_info[0],), (task.name, 'scheduled_task', task.amount))
+      for task, amount_left in to_transfer.items():
+        effective_speed = min(link_bandwidth[link] / (link_usage[link]+1) for link in task_to_links[task])
+        eta = amount_left / effective_speed
+        selector.update((cur_time + eta,), (task, 'finished_task', 0))
+      for task in new_tasks:
+        if task['name'] in unscheduled_tasks:
+          selector.update((task['start_time'],), (task['name'], 'scheduled_task', task['amount']))
+      event_time = selector.key[0]
+      affected_task, event_type, task_amount = selector.value
+
+      if event_type == 'scheduled_task':
+        if affected_task in unscheduled_tasks:
+          unscheduled_tasks.remove(affected_task)
+        else:
+          transfer_tasks_idx += 1
+      if affected_task in unfinished_tasks and event_type == 'finished_task':
+        unfinished_tasks.remove(affected_task)
+        if not absolute:
+          results[affected_task] = event_time - task_to_start_time[affected_task]
+      if not unfinished_tasks:
+        if absolute:
+          return event_time
+        else:
+          return max(results)
+
+      for task in to_transfer:
+        # TODO: оптимизировать, взяв значения из расчётов выше
+        effective_speed = min(link_bandwidth[link] / (link_usage[link]+1) for link in task_to_links[task])
+        to_transfer[task] -= (event_time - cur_time) * effective_speed
+      if event_type == 'scheduled_task':
+        for link in task_to_links[affected_task]:
+          link_usage[link] += 1
+        to_transfer[affected_task] = task_amount
+      elif event_type == 'finished_task':
+        for link in task_to_links[affected_task]:
+          link_usage[link] -= 1
+        del to_transfer[affected_task]
+      cur_time = event_time
+
+  def update_schedule_for_transfer(self, new_task, start_time, src, dst):
+    self._transfer_tasks[new_task] = (start_time, src, dst)
 
   def copy(self):
     """
@@ -307,7 +451,9 @@ cdef class SchedulerState(object):
     #   copy.deepcopy is slow as hell
     task_states = {task: dict(state) for (task, state) in self._task_states.items()}
     timetable = {host: list(timesheet) for (host, timesheet) in self._timetable.items()}
-    return SchedulerState(task_states=task_states, timetable=timetable)
+    links = {link for link in self._links}
+    transfer_tasks = {task: value for (task, value) in self._transfer_tasks.items()}
+    return SchedulerState(task_states=task_states, timetable=timetable, links=links, transfer_tasks=transfer_tasks)
 
   @property
   def task_states(self):
@@ -508,6 +654,55 @@ cpdef heft_schedule(object nxgraph, PlatformModel platform_model, SchedulerState
       #  if equal - sort by host name (guaranteed to be unique)
       current_min.update((finish, host.speed, host.name), (host, pos, start, finish))
     host, pos, start, finish = current_min.value
+    state.update(task, host, pos, start, finish)
+  return state
+
+
+cpdef enhanced_heft_schedule(object nxgraph, PlatformModel platform_model, SchedulerState state, list ordered_tasks,
+                    str data_transfer_mode):
+  """
+  Builds a HEFT schedule, additionally taking into account network contention during file transfers.
+  """
+  cdef MinSelector current_min
+  cdef int pos
+  cdef cplatform.Host host
+  cdef double est, eet, start, finish
+
+  for task in ordered_tasks:
+    if try_schedule_boundary_task(task, nxgraph, platform_model, state):
+      continue
+    current_min = MinSelector()
+    for host, timesheet in state.timetable.items():
+      if is_master_host(host):
+        continue
+      if data_transfer_mode in ["LAZY", "LAZY_PARENTS"]:
+        est = platform_model.max_ect(list(nxgraph.pred[task]), state)
+        eet = platform_model.enhanced_max_comm_time(host, dict(nxgraph.pred[task]), state) + \
+              platform_model.eet(task, host)  # TODO: протестировать
+      elif data_transfer_mode == "PARENTS":
+        est = platform_model.max_ect(list(nxgraph.pred[task]), state) + \
+              platform_model.enhanced_max_comm_time(host, dict(nxgraph.pred[task]), state)  # TODO: протестировать
+        eet = platform_model.eet(task, host)
+      else: # classic HEFT, i.e. EAGER data transfers
+        est = platform_model.enhanced_est(host, dict(nxgraph.pred[task]), state)  # TODO: протестировать
+        eet = platform_model.eet(task, host)
+      pos, start, finish = timesheet_insertion(timesheet, host.cores, est, eet)
+      # strange key order to ensure stable sorting:
+      #  first sort by ECT (as HEFT requires)
+      #  if equal - sort by host speed
+      #  if equal - sort by host name (guaranteed to be unique)
+      current_min.update((finish, host.speed, host.name), (host, pos, start, finish))
+    host, pos, start, finish = current_min.value
+    if data_transfer_mode in ["LAZY", "LAZY_PARENTS"]:
+      raise NotImplementedError('Enhanced HEFT cannot yet work in {} mode'.format(data_transfer_mode))
+    elif data_transfer_mode == "PARENTS":
+      raise NotImplementedError('Enhanced HEFT cannot yet work in PARENTS mode')
+    else:
+      for parent, edge in nxgraph.pred[task].items():
+        transfer_start_time = state._task_states[parent]['ect']
+        transfer_src_host = state._task_states[parent]['host']
+        transfer_task = state._transfer_task_by_name[edge['name']]
+        state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
     state.update(task, host, pos, start, finish)
   return state
 

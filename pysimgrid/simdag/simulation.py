@@ -118,7 +118,7 @@ class Simulation(object):
       assert len(parents) == 1 and len(children) == 1
       # make sure that the original task graph is not multigraph!
       assert not graph.has_edge(parents[0], children[0])
-      graph.add_edge(parents[0], children[0], weight=e.amount)
+      graph.add_edge(parents[0], children[0], weight=e.amount, name=e.name)
 
     return graph
 

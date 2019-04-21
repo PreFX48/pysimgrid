@@ -50,6 +50,7 @@ cdef extern from "simgrid/simdag.h":
   const char* sg_link_name(SD_link_t link);
   SD_link_t sg_link_by_name (const char *name);
   double sg_link_bandwidth (SD_link_t link);
+  double sg_link_latency (SD_link_t link);
 
   double SD_route_get_latency(sg_host_t src, sg_host_t dst);
   double SD_route_get_bandwidth(sg_host_t src, sg_host_t dst);
