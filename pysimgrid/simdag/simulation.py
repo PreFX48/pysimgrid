@@ -185,6 +185,15 @@ class Simulation(object):
     self._tasks.append(sim_task)
     return sim_task
 
+  def add_transfer(self, name, amount):
+    """
+    Add communicational task.
+    """
+    task = csimdag.add_comm_task(name, amount)
+    sim_task = _SimulationTask(task.native, self, self._logger)
+    self._tasks.append(sim_task)
+    return sim_task
+
   def sanity_check(self):
     """
     Check whether task executions overlap on hosts or not.

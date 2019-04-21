@@ -222,7 +222,9 @@ class StaticScheduler(Scheduler):
         comp_task = comm_task.children[0]
         self._simulation.remove_dependency(comm_task, comp_task)
         self._simulation.add_dependency(comm_task, dummy_task)
-        self._simulation.add_dependency(dummy_task, comp_task)
+        dummy_transfer_task = self._simulation.add_transfer('{} -> {}'.format(dummy_task.name, comp_task.name), 0)
+        self._simulation.add_dependency(dummy_task, dummy_transfer_task)
+        self._simulation.add_dependency(dummy_transfer_task, comp_task)
 
     if self._data_transfer_mode in [DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT]:
       data_transfers = []
@@ -293,21 +295,22 @@ class StaticScheduler(Scheduler):
 
   def check_and_schedule_parent_transfers(self, task, task_to_host):
     for e2e in task.children:
+      dummy_task = e2e.children[0]
       if self._data_transfer_mode == DataTransferMode.PARENTS:
-        consumer = e2e.children[0].children[0]
-        consumer_transfers = [x for x in consumer.parents]
+        consumer = dummy_task.children[0].children[0]
+        consumer_transfers = [x.parents[0] for x in consumer.parents]
         consumer_parents = [x.parents[0].parents[0] for x in consumer_transfers]
         if all(x.state == csimdag.TASK_STATE_DONE for x in consumer_parents):
           for transfer_task in consumer_transfers:
-            consumer_task = transfer_task.children[0]
+            consumer_task = transfer_task.children[0].children[0]
             host = task_to_host[consumer_task]
             if transfer_task.state < csimdag.TASK_STATE_SCHEDULED:
               transfer_task.schedule(host)
       else:
-        transfer_task = e2e.children[0]
-        consumer_task = transfer_task.children[0]
+        dummy_task = e2e.children[0]
+        consumer_task = dummy_task.children[0].children[0]
         host = task_to_host[consumer_task]
-        transfer_task.schedule(host)
+        dummy_task.schedule(host)
 
   @abc.abstractmethod
   def get_schedule(self, simulation):

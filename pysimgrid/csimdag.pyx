@@ -205,6 +205,14 @@ def add_task(name, amount):
   return Task.wrap(csimdag.SD_task_create_comp_seq(utf8name, NULL, amount));
 
 
+def add_comm_task(name, amount):
+  """
+  Add communicational task to SimDAG graph.
+  """
+  cdef bytes utf8name = common.utf8_string(name)
+  return Task.wrap(csimdag.SD_task_create_comm_e2e(utf8name, NULL, amount))
+
+
 def exit():
   """
   Finalize simulator operation.
