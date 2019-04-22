@@ -241,6 +241,8 @@ cdef class PlatformModel(object):
       }
       for parent, edge in parents.items()
     ]
+    if [x for x in transfers if x['name'] == 'task_10->task_20']:
+      print('HOST {}, TRANSFERS {}'.format(host.name, transfers))
     transfer_finish_time = state.get_transfer_time(transfers, True)
     return transfer_finish_time
 
