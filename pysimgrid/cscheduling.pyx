@@ -241,11 +241,7 @@ cdef class PlatformModel(object):
       }
       for parent, edge in parents.items()
     ]
-    if [x for x in transfers if x['name'] == 'task_10->task_20']:
-      print('HOST {}, TRANSFERS {}'.format(host.name, transfers))
     transfer_finish_time = state.get_transfer_time(transfers, True)
-    if [x for x in transfers if x['name'] == 'task_10->task_20']:
-      print('ENHANCED_EST = {}'.format(transfer_finish_time))
     return transfer_finish_time
 
   cpdef max_ect(self, list tasks, SchedulerState state):
@@ -690,8 +686,6 @@ cpdef enhanced_heft_schedule(object nxgraph, PlatformModel platform_model, Sched
       else: # classic HEFT, i.e. EAGER data transfers
         est = platform_model.enhanced_est(host, dict(nxgraph.pred[task]), state)  # TODO: протестировать
         eet = platform_model.eet(task, host)
-        if task.name in ['task_10', 'task_20']:
-          print('Task {}: host={}, est={}, eet={}, parents={}'.format(task.name, host.name, est, eet, [x.name for x in nxgraph.pred[task]]))
       pos, start, finish = timesheet_insertion(timesheet, host.cores, est, eet)
       # strange key order to ensure stable sorting:
       #  first sort by ECT (as HEFT requires)
@@ -709,8 +703,6 @@ cpdef enhanced_heft_schedule(object nxgraph, PlatformModel platform_model, Sched
         transfer_src_host = state._task_states[parent]['host']
         transfer_task = state._transfer_task_by_name[edge['name']]
         state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
-    if task.name in ['task_10', 'task_20']:
-      print('Task {}: start={}, finish={}, pos={}, host={}, parents={}'.format(task.name, start, finish, pos, host.name, [x.name for x in nxgraph.pred[task]]))
     state.update(task, host, pos, start, finish)
   return state
 
