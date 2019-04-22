@@ -703,6 +703,8 @@ cpdef enhanced_heft_schedule(object nxgraph, PlatformModel platform_model, Sched
         transfer_src_host = state._task_states[parent]['host']
         transfer_task = state._transfer_task_by_name[edge['name']]
         state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
+    if task.name in ['task_10', 'task_20']:
+      print('Task {}: start={}, finish={}, pos={}, host={}'.format(task.name, start, finish, pos, host.name))
     state.update(task, host, pos, start, finish)
   return state
 
