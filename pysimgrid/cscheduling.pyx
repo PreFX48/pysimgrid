@@ -417,7 +417,7 @@ cdef class SchedulerState(object):
           results[affected_task] = event_time - task_to_start_time[affected_task]
       if not unfinished_tasks:
         if absolute:
-          return event_time
+          return max(event_time, max_start_time)
         else:
           return max(results)
 
