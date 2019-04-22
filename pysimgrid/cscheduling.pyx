@@ -687,7 +687,7 @@ cpdef enhanced_heft_schedule(object nxgraph, PlatformModel platform_model, Sched
         est = platform_model.enhanced_est(host, dict(nxgraph.pred[task]), state)  # TODO: протестировать
         eet = platform_model.eet(task, host)
         if task.name in ['task_10', 'task_20']:
-          print('Task {}: est={}, eet={}'.format(task.name, est, eet))
+          print('Task {}: host={}, est={}, eet={}'.format(host, task.name, est, eet))
       pos, start, finish = timesheet_insertion(timesheet, host.cores, est, eet)
       # strange key order to ensure stable sorting:
       #  first sort by ECT (as HEFT requires)
