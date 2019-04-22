@@ -244,6 +244,8 @@ cdef class PlatformModel(object):
     if [x for x in transfers if x['name'] == 'task_10->task_20']:
       print('HOST {}, TRANSFERS {}'.format(host.name, transfers))
     transfer_finish_time = state.get_transfer_time(transfers, True)
+    if [x for x in transfers if x['name'] == 'task_10->task_20']:
+      print('ENHANCED_EST = {}'.format(transfer_finish_time))
     return transfer_finish_time
 
   cpdef max_ect(self, list tasks, SchedulerState state):
