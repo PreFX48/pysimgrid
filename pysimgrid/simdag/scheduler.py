@@ -215,14 +215,15 @@ class StaticScheduler(Scheduler):
 
     if self._data_transfer_mode in (DataTransferMode.EAGER, DataTransferMode.PARENTS,DataTransferMode.PREFETCH,
                                     DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
-      for comm_task in self._simulation._tasks:
-        if comm_task.kind != csimdag.TaskKind.TASK_KIND_COMM_E2E:
-          continue
-        dummy_task = self._simulation.add_task('__DUMMY__TRANSFER__TASK__{}'.format(comm_task.name), 0)
+      comm_tasks = [task for task in self._simulation._tasks if task.kind == csimdag.TaskKind.TASK_KIND_COMM_E2E]
+      for comm_task in comm_tasks:
+        producer = comm_task.parents[0]
+        consumer = comm_task.children[0]
+        dummy_task = self._simulation.add_task('__DUMMY__TRANSFER__TASK__{}_{}'.format(producer.name, consumer.name), 1)
         comp_task = comm_task.children[0]
         self._simulation.remove_dependency(comm_task, comp_task)
         self._simulation.add_dependency(comm_task, dummy_task)
-        dummy_transfer_task = self._simulation.add_transfer('{} -> {}'.format(dummy_task.name, comp_task.name), 0)
+        dummy_transfer_task = self._simulation.add_transfer('{}_e2e'.format(dummy_task.name), 1)
         self._simulation.add_dependency(dummy_task, dummy_transfer_task)
         self._simulation.add_dependency(dummy_transfer_task, comp_task)
 
