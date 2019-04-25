@@ -437,6 +437,7 @@ cdef class SchedulerState(object):
 
   def update_schedule_for_transfer(self, new_task, start_time, src, dst):
     self._transfer_tasks[new_task] = (start_time, src, dst)
+    # TODO: пересчитать ect для всех ранее поставленных тасок
 
   def copy(self):
     """
