@@ -213,6 +213,14 @@ def add_comm_task(name, amount):
   return Task.wrap(csimdag.SD_task_create_comm_e2e(utf8name, NULL, amount))
 
 
+def remove_task(csimdag.Task task):
+  """
+  Destroy task. The user data (if any) should have been destroyed first.
+  """
+  csimdag.SD_task_destroy(task.impl)
+
+
+
 def exit():
   """
   Finalize simulator operation.

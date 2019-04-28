@@ -100,6 +100,7 @@ cdef extern from "simgrid/simdag.h":
   SD_task_t SD_task_create_comp_par_amdahl(const char* name, void* data, double amount, double alpha);
   SD_task_t SD_task_create_comm_e2e(const char* name, void* data, double amount);
   SD_task_t SD_task_create_comm_par_mxn_1d_block(const char* name, void* data, double amount);
+  void SD_task_destroy(SD_task_t task);
   void SD_task_distribute_comp_amdahl(SD_task_t task, int ws_count);
   #void SD_task_schedulel(SD_task_t task, int count, ...); # disable vararg signature
 

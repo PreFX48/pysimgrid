@@ -234,6 +234,7 @@ cdef class PlatformModel(object):
     cdef list transfers = [
       {
         'name': edge['name'],
+        'parent': parent['name'],
         'start_time': task_states[parent]['ect'],
         'src': task_states[parent]['host'],
         'dst': host,
@@ -241,8 +242,8 @@ cdef class PlatformModel(object):
       }
       for parent, edge in parents.items()
     ]
-    transfer_finish_time = state.get_transfer_time(transfers, True)
-    return transfer_finish_time
+    transfer_finish_time, cached_tasks, transfer_finishes = state.get_transfer_time(transfers, True)
+    return transfer_finish_time, cached_tasks, transfer_finishes
 
   cpdef max_ect(self, list tasks, SchedulerState state):
     """
@@ -310,7 +311,7 @@ cdef class PlatformModel(object):
       }
       for parent, edge in tasks.items()
     ]
-    transfer_duration = state.get_transfer_time(transfers, False)
+    transfer_duration = state.get_transfer_time(transfers, False)  # TODO: вызываемая функция изменилась
     return transfer_duration
 
   def host_idx(self, cplatform.Host host):
@@ -328,8 +329,9 @@ cdef class SchedulerState(object):
   cdef set _links
   cdef dict _transfer_tasks
   cdef dict _transfer_task_by_name
+  cdef dict _cached_transfers
 
-  def __init__(self, simulation=None, task_states=None, timetable=None, links=None, transfer_tasks=None):
+  def __init__(self, simulation=None, task_states=None, timetable=None, links=None, transfer_tasks=None, cached_transfers=None):
     if simulation:
       if task_states or timetable:
         raise Exception("simulation is provided, initial state is not expected")
@@ -342,6 +344,7 @@ cdef class SchedulerState(object):
             self._links.add(link)
       self._transfer_tasks = {task: None for task in simulation.connections}
       self._transfer_task_by_name = {task.name: task for task in self._transfer_tasks}
+      self._cached_transfers = {}
     else:
       if not task_states or not timetable or not links or not transfer_tasks:
         raise Exception("initial state must be provided")
@@ -350,8 +353,9 @@ cdef class SchedulerState(object):
       self._links = links
       self._transfer_tasks = transfer_tasks
       self._transfer_task_by_name = {task.name: task for task in self._transfer_tasks}
+      self._cached_transfers = cached_transfers
 
-  def get_transfer_time(self, new_tasks, absolute):
+  def get_transfer_time(self, new_tasks, absolute, cache=False):
     # TODO: тут нужен Cython
     """
     Args:
@@ -360,15 +364,29 @@ cdef class SchedulerState(object):
     Returns:
       estimated finish time of all provided transfer tasks in total
     """
+    # TODO: нормальная документация на английском
     # TODO: сейчас мы будем считать, что канал всегда делится между потоками поровну
     # TODO: надо изучить, что делать в случае, когда поток не может полностью заиспользовать свою долю канала
+    transfer_finishes = {}
     max_start_time = max(task['start_time'] for task in new_tasks)
-    new_tasks = [task for task in new_tasks if task['src'] != task['dst']]
+    cached_tasks = set()
+    if cache:
+      for task in new_tasks:
+        if task['src'] == task['dst']:
+          transfer_finishes[task['name']] = task['start_time']
+          continue  # не нужно ни файлы передавать, ни кеш использовать
+        cache_time = self._cached_transfers.get(task['parent'], {}).get(task['dst'])  # TODO: где это заполнять?
+        if cache_time is not None and cache_time[0] <= task['start_time']:
+          transfer_finishes[task['name']] = task['start_time']
+          cached_tasks.add(task['name'])
+    new_tasks = [task for task in new_tasks if task['src'] != task['dst'] and task['name'] not in cached_tasks]
+
+
     if not new_tasks:
       if absolute:
-        return max_start_time
+        return max_start_time, cached_tasks, transfer_finishes
       else:
-        return 0.0
+        return 0.0, cached_tasks, transfer_finishes
 
     transfer_tasks = sorted(
       [(t, info) for (t, info) in self._transfer_tasks.items() if info is not None and info[1] != info[2]],
@@ -412,14 +430,15 @@ cdef class SchedulerState(object):
         else:
           transfer_tasks_idx += 1
       if affected_task in unfinished_tasks and event_type == 'finished_task':
+        transfer_finishes[affected_task] = event_time
         unfinished_tasks.remove(affected_task)
         if not absolute:
           results[affected_task] = event_time - task_to_start_time[affected_task]
       if not unfinished_tasks:
         if absolute:
-          return max(event_time, max_start_time)
+          return max(event_time, max_start_time), cached_tasks, transfer_finishes
         else:
-          return max(results)
+          return max(results), cached_tasks, transfer_finishes
 
       for task in to_transfer:
         # TODO: оптимизировать, взяв значения из расчётов выше
@@ -454,7 +473,8 @@ cdef class SchedulerState(object):
     timetable = {host: list(timesheet) for (host, timesheet) in self._timetable.items()}
     links = {link for link in self._links}
     transfer_tasks = {task: value for (task, value) in self._transfer_tasks.items()}
-    return SchedulerState(task_states=task_states, timetable=timetable, links=links, transfer_tasks=transfer_tasks)
+    cached_transfers = {k:v for (k, v) in self._cached_transfers.items()}
+    return SchedulerState(task_states=task_states, timetable=timetable, links=links, transfer_tasks=transfer_tasks, cached_transfers=cached_transfers)
 
   @property
   def task_states(self):
@@ -464,6 +484,10 @@ cdef class SchedulerState(object):
     Layout: a dict {Task: {"ect": float, "host": Host}}
     """
     return self._task_states
+
+  @property
+  def cached_transfers(self):
+    return self._cached_transfers
 
   @property
   def timetable(self):
@@ -659,7 +683,7 @@ cpdef heft_schedule(object nxgraph, PlatformModel platform_model, SchedulerState
   return state
 
 
-cpdef enhanced_heft_schedule(object nxgraph, PlatformModel platform_model, SchedulerState state, list ordered_tasks,
+cpdef enhanced_heft_schedule(object simulation, object nxgraph, PlatformModel platform_model, SchedulerState state, list ordered_tasks,
                     str data_transfer_mode):
   """
   Builds a HEFT schedule, additionally taking into account network contention during file transfers.
@@ -684,20 +708,44 @@ cpdef enhanced_heft_schedule(object nxgraph, PlatformModel platform_model, Sched
         est = platform_model.max_ect(list(nxgraph.pred[task]), state) + \
               platform_model.enhanced_max_comm_time(host, dict(nxgraph.pred[task]), state)  # TODO: протестировать
         eet = platform_model.eet(task, host)
+      elif data_transfer_mode == 'EAGER_CACHING':
+        est, cached_tasks, transfer_finishes = platform_model.enhanced_est(host, dict(nxgraph.pred[task]), state)  # TODO: протестировать
+        eet = platform_model.eet(task, host)
       else: # classic HEFT, i.e. EAGER data transfers
-        est = platform_model.enhanced_est(host, dict(nxgraph.pred[task]), state)  # TODO: протестировать
+        est, cached_tasks, transfer_finishes = platform_model.enhanced_est(host, dict(nxgraph.pred[task]), state)  # TODO: протестировать
         eet = platform_model.eet(task, host)
       pos, start, finish = timesheet_insertion(timesheet, host.cores, est, eet)
       # strange key order to ensure stable sorting:
       #  first sort by ECT (as HEFT requires)
       #  if equal - sort by host speed
       #  if equal - sort by host name (guaranteed to be unique)
-      current_min.update((finish, host.speed, host.name), (host, pos, start, finish))
-    host, pos, start, finish = current_min.value
+      current_min.update((finish, host.speed, host.name), (host, pos, start, finish, cached_tasks, transfer_finishes))
+    host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
     if data_transfer_mode in ["LAZY", "LAZY_PARENTS"]:
       raise NotImplementedError('Enhanced HEFT cannot yet work in {} mode'.format(data_transfer_mode))
     elif data_transfer_mode == "PARENTS":
       raise NotImplementedError('Enhanced HEFT cannot yet work in PARENTS mode')
+    elif data_transfer_mode == 'EAGER_CACHING':
+      for parent, edge in nxgraph.pred[task].items():
+        transfer_start_time = state._task_states[parent]['ect']
+        transfer_src_host = state._task_states[parent]['host']
+        transfer_task = state._transfer_task_by_name[edge['name']]
+        state.cached_transfers.setdefault(transfer_task.parents[0].name, {})
+        cached_hosts = state.cached_transfers[transfer_task.parents[0].name]
+        if not cached_hosts.get(host.name) or cached_hosts[host.name][0] > transfer_finishes[transfer_task.name]:
+          cached_hosts[host.name] = (transfer_finishes[transfer_task.name], transfer_task)
+        if edge['name'] in cached_tasks:
+          _, old_transfer = state.cached_transfers[parent['name']][host.name]
+          # todo
+          assert len(transfer_task.parents) == 1  # TODO: пробежаться по реализации StaticScheduler
+          simulation.remove_dependency(transfer_task.parents[0], transfer_task)
+          simulation.remove_dependency(transfer_task, task)
+          simulation.remove_task(transfer_task)
+          simulation.add_dependency(old_transfer, task)
+          task.data.setdefault('uses_cache_for', [])
+          task.data['uses_cache_for'].append(parent['name'])
+        else:
+          state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
     else:
       for parent, edge in nxgraph.pred[task].items():
         transfer_start_time = state._task_states[parent]['ect']

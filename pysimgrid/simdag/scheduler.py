@@ -81,6 +81,7 @@ class DataTransferMode(Enum):
   QUEUE_ECT = 5
   PARENTS = 6
   LAZY_PARENTS = 7
+  EAGER_CACHING = 8
 
 
 class Scheduler(six.with_metaclass(abc.ABCMeta)):
@@ -220,12 +221,21 @@ class StaticScheduler(Scheduler):
         producer = comm_task.parents[0]
         consumer = comm_task.children[0]
         dummy_task = self._simulation.add_task('__DUMMY__TRANSFER__TASK__{}_{}'.format(producer.name, consumer.name), 1)
-        comp_task = comm_task.children[0]
-        self._simulation.remove_dependency(comm_task, comp_task)
+        self._simulation.remove_dependency(comm_task, consumer)
         self._simulation.add_dependency(comm_task, dummy_task)
         dummy_transfer_task = self._simulation.add_transfer('{}_e2e'.format(dummy_task.name), 1)
         self._simulation.add_dependency(dummy_task, dummy_transfer_task)
-        self._simulation.add_dependency(dummy_transfer_task, comp_task)
+        self._simulation.add_dependency(dummy_transfer_task, consumer)
+    elif self._data_transfer_mode == DataTransferMode.EAGER_CACHING:
+      comm_tasks = [task for task in self._simulation._tasks if task.kind == csimdag.TaskKind.TASK_KIND_COMM_E2E]
+      for comm_task in comm_tasks:
+        dummy_task = self._simulation.add_task('__DUMMY__TRANSFER__TASK__{}'.format(comm_task), 1)
+        self._simulation.add_dependency(comm_task, dummy_task)
+        for consumer in comm_task.children:
+          self._simulation.remove_dependency(comm_task, consumer)
+          dummy_transfer_task = self._simulation.add_transfer('{}_e2e'.format(dummy_task.name), 1)
+          self._simulation.add_dependency(dummy_task, dummy_transfer_task)
+          self._simulation.add_dependency(dummy_transfer_task, consumer)
 
     if self._data_transfer_mode in [DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT]:
       data_transfers = []
@@ -271,7 +281,8 @@ class StaticScheduler(Scheduler):
           continue  # special dummy tasks do not utilize CPU
         for h in t.hosts:
           hosts_status[h] += 1
-        if self._data_transfer_mode in (DataTransferMode.EAGER, DataTransferMode.PARENTS, DataTransferMode.PREFETCH,
+        if self._data_transfer_mode in (DataTransferMode.EAGER, DataTransferMode.PARENTS,
+                                        DataTransferMode.PREFETCH, DataTransferMode.EAGER_CACHING,
                                         DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
           self.check_and_schedule_parent_transfers(t, task_to_host)
       for host, tasks in schedule.items():
@@ -309,7 +320,10 @@ class StaticScheduler(Scheduler):
               transfer_task.schedule(host)
       else:
         dummy_task = e2e.children[0]
-        consumer_task = dummy_task.children[0].children[0]
+        consumer_tasks = [child.children[0] for child in dummy_task.children]
+        noncached_tasks = [x for x in consumer_tasks if task.name not in x.data.get('uses_cache_for', [])]
+        assert len(noncached_tasks) == 1
+        consumer_task = noncached_tasks[0]
         host = task_to_host[consumer_task]
         dummy_task.schedule(host)
 
