@@ -111,7 +111,7 @@ class Simulation(object):
 
     graph = networkx.DiGraph()
     for t in self.tasks:
-      graph.add_node(t, weight=t.amount)
+      graph.add_node(t, weight=t.amount, name=t.name)
 
     for e in self.connections:
       parents, children = e.parents, e.children
@@ -193,6 +193,12 @@ class Simulation(object):
     sim_task = _SimulationTask(task.native, self, self._logger)
     self._tasks.append(sim_task)
     return sim_task
+
+  def remove_task(self, task):
+    """
+    Remove any kind of task
+    """
+    csimdag.remove_task(task)
 
   def sanity_check(self):
     """

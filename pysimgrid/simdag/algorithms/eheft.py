@@ -33,7 +33,7 @@ class EHEFT(scheduler.StaticScheduler):
 
     ordered_tasks = cscheduling.heft_order(nxgraph, platform_model)
 
-    cscheduling.enhanced_heft_schedule(nxgraph, platform_model, state, ordered_tasks, self._data_transfer_mode.name)
+    cscheduling.enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_tasks, self._data_transfer_mode.name)
     # store ECT in tasks for QUEUE_ECT data transfer mode
     for task, task_state in state.task_states.items():
       task.data = {"ect": task_state["ect"]}
