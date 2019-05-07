@@ -185,6 +185,11 @@ class StaticScheduler(Scheduler):
     self.__total_time = -1.
     self.__expected_makespan = None
 
+  DUMMY_TASK_MODES = (
+    DataTransferMode.EAGER, DataTransferMode.EAGER_CACHING, DataTransferMode.PARENTS,
+    DataTransferMode.PREFETCH, DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT,
+  )
+
   def run(self):
     start_time = time.time()
 
@@ -214,28 +219,40 @@ class StaticScheduler(Scheduler):
       for task in tasks:
         task_to_host[task] = host
 
-    if self._data_transfer_mode in (DataTransferMode.EAGER, DataTransferMode.PARENTS,DataTransferMode.PREFETCH,
-                                    DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
+    import networkx
+    graph = self._simulation.get_task_graph(for_debug=True, task_to_host=task_to_host)
+    networkx.drawing.nx_pydot.write_dot(graph, 'initial.dot')
+
+    if self._data_transfer_mode == DataTransferMode.EAGER_CACHING:
+      added_tasks = set()
+      comm_tasks = [task for task in self._simulation._tasks if task.kind == csimdag.TaskKind.TASK_KIND_COMM_E2E]
+      for comm_task in comm_tasks:
+        dummy_task = self._simulation.add_task('____DTT__{}'.format(comm_task.name), 1)
+        assert dummy_task.name not in added_tasks, 'Task {} already exists!'.format(dummy_task.name)
+        added_tasks.add(dummy_task.name)
+        for consumer in list(comm_task.children):
+          self._simulation.remove_dependency(comm_task, consumer)
+          dummy_transfer_task = self._simulation.add_transfer('{}_e2e_{}'.format(dummy_task.name, consumer.name), 1)
+          assert dummy_transfer_task.name not in added_tasks, 'Task {} already exists!'.format(dummy_transfer_task.name)
+          added_tasks.add(dummy_transfer_task.name)
+          self._simulation.add_dependency(dummy_task, dummy_transfer_task)
+          self._simulation.add_dependency(dummy_transfer_task, consumer)
+        self._simulation.add_dependency(comm_task, dummy_task)
+    elif self._data_transfer_mode in self.DUMMY_TASK_MODES:
       comm_tasks = [task for task in self._simulation._tasks if task.kind == csimdag.TaskKind.TASK_KIND_COMM_E2E]
       for comm_task in comm_tasks:
         producer = comm_task.parents[0]
         consumer = comm_task.children[0]
-        dummy_task = self._simulation.add_task('__DUMMY__TRANSFER__TASK__{}_{}'.format(producer.name, consumer.name), 1)
+        dummy_task = self._simulation.add_task('____DTT__{}_{}'.format(producer.name, consumer.name), 1)
         self._simulation.remove_dependency(comm_task, consumer)
         self._simulation.add_dependency(comm_task, dummy_task)
         dummy_transfer_task = self._simulation.add_transfer('{}_e2e'.format(dummy_task.name), 1)
         self._simulation.add_dependency(dummy_task, dummy_transfer_task)
         self._simulation.add_dependency(dummy_transfer_task, consumer)
-    elif self._data_transfer_mode == DataTransferMode.EAGER_CACHING:
-      comm_tasks = [task for task in self._simulation._tasks if task.kind == csimdag.TaskKind.TASK_KIND_COMM_E2E]
-      for comm_task in comm_tasks:
-        dummy_task = self._simulation.add_task('__DUMMY__TRANSFER__TASK__{}'.format(comm_task), 1)
-        self._simulation.add_dependency(comm_task, dummy_task)
-        for consumer in comm_task.children:
-          self._simulation.remove_dependency(comm_task, consumer)
-          dummy_transfer_task = self._simulation.add_transfer('{}_e2e'.format(dummy_task.name), 1)
-          self._simulation.add_dependency(dummy_task, dummy_transfer_task)
-          self._simulation.add_dependency(dummy_transfer_task, consumer)
+
+    import networkx
+    graph = self._simulation.get_task_graph(for_debug=True, task_to_host=task_to_host)
+    networkx.drawing.nx_pydot.write_dot(graph, 'transformed.dot')
 
     if self._data_transfer_mode in [DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT]:
       data_transfers = []
@@ -277,13 +294,11 @@ class StaticScheduler(Scheduler):
     changed = self._simulation.tasks.by_func(lambda t: False)
     while True:
       for t in changed.by_prop("kind", csimdag.TASK_KIND_COMM_E2E, negate=True)[csimdag.TASK_STATE_DONE]:
-        if t.name.startswith('__DUMMY__TRANSFER__TASK__'):
+        if t.name.startswith('____DTT__'):
           continue  # special dummy tasks do not utilize CPU
         for h in t.hosts:
           hosts_status[h] += 1
-        if self._data_transfer_mode in (DataTransferMode.EAGER, DataTransferMode.PARENTS,
-                                        DataTransferMode.PREFETCH, DataTransferMode.EAGER_CACHING,
-                                        DataTransferMode.QUEUE, DataTransferMode.QUEUE_ECT):
+        if self._data_transfer_mode in self.DUMMY_TASK_MODES:
           self.check_and_schedule_parent_transfers(t, task_to_host)
       for host, tasks in schedule.items():
         scheduled_tasks = set()
@@ -294,7 +309,13 @@ class StaticScheduler(Scheduler):
             if not all(p.parents[0].state == csimdag.TASK_STATE_DONE for p in task.parents):
               continue
           scheduled_tasks.add(task)
-          task.schedule(host)
+          if self._data_transfer_mode in self.DUMMY_TASK_MODES:
+            for e2e in task.parents:
+              transfer = e2e.parents[0]
+              if transfer.state < csimdag.TASK_STATE_SCHEDULED:
+                transfer.schedule(host)
+          if task.state < csimdag.TASK_STATE_SCHEDULED:
+            task.schedule(host)
           hosts_status[host] -= 1
         schedule[host] = [task for task in tasks if task not in scheduled_tasks]
       changed = self._simulation.simulate()
@@ -322,10 +343,11 @@ class StaticScheduler(Scheduler):
         dummy_task = e2e.children[0]
         consumer_tasks = [child.children[0] for child in dummy_task.children]
         noncached_tasks = [x for x in consumer_tasks if task.name not in x.data.get('uses_cache_for', [])]
-        assert len(noncached_tasks) == 1
+        assert len(noncached_tasks) == 1, 'Should be one noncached task, got {}'.format(len(noncached_tasks))
         consumer_task = noncached_tasks[0]
         host = task_to_host[consumer_task]
-        dummy_task.schedule(host)
+        if dummy_task.state < csimdag.TASK_STATE_SCHEDULED:
+          dummy_task.schedule(host)
 
   @abc.abstractmethod
   def get_schedule(self, simulation):

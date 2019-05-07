@@ -17,6 +17,7 @@
 #
 
 from .. import scheduler
+# from ... import scheduling as cscheduling
 from ... import cscheduling
 
 
@@ -33,9 +34,11 @@ class EHEFT(scheduler.StaticScheduler):
 
     ordered_tasks = cscheduling.heft_order(nxgraph, platform_model)
 
-    cscheduling.enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_tasks, self._data_transfer_mode.name)
+    cscheduling.enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_tasks, self._data_transfer_mode.name, 0)
     # store ECT in tasks for QUEUE_ECT data transfer mode
     for task, task_state in state.task_states.items():
-      task.data = {"ect": task_state["ect"]}
+      if task.data is None:
+        task.data = {}
+      task.data['ect'] = task_state["ect"]
     expected_makespan = max([state["ect"] for state in state.task_states.values()])
     return state.schedule, expected_makespan
