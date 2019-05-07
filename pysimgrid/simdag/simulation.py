@@ -99,7 +99,7 @@ class Simulation(object):
 
     return changed_tasks
 
-  def get_task_graph(self):
+  def get_task_graph(self, for_debug=False, task_to_host=None):
     """
     Get current DAG as a nxgraph.DiGraph.
 
@@ -111,14 +111,39 @@ class Simulation(object):
 
     graph = networkx.DiGraph()
     for t in self.tasks:
-      graph.add_node(t, weight=t.amount, name=t.name)
+      if for_debug:
+        node_name = t.name.replace('task_', '').replace('____DTT__', 'DTT_')
+        if t in task_to_host:
+          node_name += '_' + task_to_host[t].name
+        if (t.data or {}).get('uses_cache_for'):
+          node_name += '_CACHE_' + t.data['uses_cache_for'][0]
+        graph.add_node(node_name, weight=t.amount)
+      else:
+        graph.add_node(t, weight=t.amount)
 
     for e in self.connections:
       parents, children = e.parents, e.children
-      assert len(parents) == 1 and len(children) == 1
+      if not for_debug:
+        assert len(parents) == 1 and len(children) == 1
       # make sure that the original task graph is not multigraph!
-      assert not graph.has_edge(parents[0], children[0])
-      graph.add_edge(parents[0], children[0], weight=e.amount, name=e.name)
+      if not for_debug:
+        assert not graph.has_edge(parents[0], children[0])
+      import itertools
+      for parent, child in itertools.product(parents, children):
+        if for_debug:
+          parent_name = parent.name.replace('task_', '').replace('____DTT__', 'DTT_')
+          if parent in task_to_host:
+            parent_name += '_' + task_to_host[parent].name
+          if (parent.data or {}).get('uses_cache_for'):
+            parent_name += '_CACHE_' + parent.data['uses_cache_for'][0]
+          child_name = child.name.replace('task_', '').replace('____DTT__', 'DTT_')
+          if child in task_to_host:
+            child_name += '_' + task_to_host[child].name
+          if (child.data or {}).get('uses_cache_for'):
+            child_name += '_CACHE_' + child.data['uses_cache_for'][0]
+          graph.add_edge(parent_name, child_name, size=e.amount)
+        else:
+          graph.add_edge(parent, child, weight=e.amount, name=e.name)
 
     return graph
 
@@ -198,6 +223,7 @@ class Simulation(object):
     """
     Remove any kind of task
     """
+    self._tasks.remove(task)
     csimdag.remove_task(task)
 
   def sanity_check(self):
@@ -207,7 +233,7 @@ class Simulation(object):
     cores = {}
     timetable_per_host = {}
     for task in self.tasks:
-      if task.name.startswith('__DUMMY__TRANSFER__TASK__'):
+      if task.name.startswith('____DTT__'):
         continue
       host = task.hosts
       assert(len(host) == 1)
