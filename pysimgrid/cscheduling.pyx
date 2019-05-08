@@ -546,6 +546,8 @@ cdef class SchedulerState(object):
     # update task state
     cdef dict task_state = self._task_states[task]
     cdef list timesheet = self._timetable[host]
+    task_state["est"] = start
+    task_state["eet"] = finish - start
     task_state["ect"] = finish
     task_state["host"] = host
     # update timesheet

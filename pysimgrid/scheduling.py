@@ -1,7 +1,9 @@
 import bisect
+import heapq
 import networkx
 import numpy
 
+from . import csimdag
 from . import cplatform
 from .cscheduling import MinSelector, try_schedule_boundary_task_object as try_schedule_boundary_task
 
@@ -212,7 +214,8 @@ class SchedulerState(object):
   See properties description for details.
   """
 
-  def __init__(self, simulation=None, task_states=None, timetable=None, links=None, transfer_tasks=None, cached_transfers=None):
+  def __init__(self, simulation=None, task_states=None, timetable=None, links=None,
+               transfer_tasks=None, cached_transfers=None, hosts=None, tasks=None):
     if simulation:
       if task_states or timetable:
         raise Exception("simulation is provided, initial state is not expected")
@@ -226,8 +229,12 @@ class SchedulerState(object):
       self._transfer_tasks = {task: None for task in simulation.connections}
       self._transfer_task_by_name = {task.name: task for task in self._transfer_tasks}
       self._cached_transfers = {}
+      self._hosts = simulation.hosts
+      self._tasks = [t for t in simulation.all_tasks]
     else:
-      if not task_states or not timetable or not links or not transfer_tasks:
+      if (
+        not task_states or not timetable or not links or not transfer_tasks
+        or cached_transfers is None or not hosts or not tasks):
         raise Exception("initial state must be provided")
       self._task_states = task_states
       self._timetable = timetable
@@ -235,6 +242,8 @@ class SchedulerState(object):
       self._transfer_tasks = transfer_tasks
       self._transfer_task_by_name = {task.name: task for task in self._transfer_tasks}
       self._cached_transfers = cached_transfers
+      self._hosts = hosts
+      self._tasks = tasks
 
   def get_transfer_time(self, new_tasks, absolute, use_cache=False):
     transfer_finishes = {}
@@ -320,8 +329,132 @@ class SchedulerState(object):
         del to_transfer[affected_task]
       cur_time = event_time
 
-  def update_schedule_for_transfer(self, new_task, start_time, src, dst):
-    self._transfer_tasks[new_task] = (start_time, src, dst)
+  def update_schedule_for_transfers(self, new_tasks):
+    # SIMULATE THE WORLD
+    for task in new_tasks:
+      self._transfer_tasks[task['task']] = (task['start_time'], task['src'], task['dst'])
+    import os
+    if os.environ.get('IMPROVE_SIMULATION', '0') == '0':
+      return
+
+    task_to_links = {
+      task: cplatform.route(task_info[1], task_info[2])
+      for (task, task_info) in self._transfer_tasks.items()
+      if task_info is not None and task_info[1] != task_info[2]
+    }
+    comp_timetable = {}
+    for host, timesheet in self._timetable.items():
+      for task, start_time, _ in timesheet:
+        comp_timetable[task] = (host, start_time)
+    pending_dependencies = {task: len(task.parents) for task in self._tasks}
+    awaiting_children = {task: task.children for task in self._tasks}
+    link_usage = {name: 0 for name in self._links}
+    link_bandwidth = {name: cplatform.link_bandwidth(name) for name in self._links}
+
+    root = [task for task in self._tasks if task.name == 'root']
+    assert len(root) == 1
+    root = root[0]
+
+    comp_events = []
+    heapq.heappush(comp_events, (self._task_states[root]['ect'], 0, root))
+    to_transfer = {}
+
+    cur_time = None  # will be filled at the first iteration
+    while comp_events or to_transfer:
+      if comp_events:
+        comp_time, comp_type, comp_task = comp_events[0]
+      else:
+        comp_time = None
+      if to_transfer:
+        selector = MinSelector()
+        for task, amount_left in to_transfer.items():
+          effective_speed = min(link_bandwidth[link] / (link_usage[link] + 1) for link in task_to_links[task])
+          eta = amount_left / effective_speed
+          assert cur_time is not None
+          selector.update((cur_time + eta,), (task,))
+        comm_time = selector.key[0]
+        comm_task = selector.value[0]
+      else:
+        comm_time = None
+
+      if comm_time is not None and (comp_time is None or comm_time <= comp_time):
+        for task in to_transfer:
+          effective_speed = min(link_bandwidth[link] / (link_usage[link] + 1) for link in task_to_links[task])
+          to_transfer[task] -= (comm_time - cur_time) * effective_speed
+        for link in task_to_links[comm_task]:
+          link_usage[link] -= 1
+        del to_transfer[comm_task]
+        for child in awaiting_children[comm_task]:
+          pending_dependencies[child] -= 1
+          if pending_dependencies[child] == 0:
+            expected_host, expected_time = comp_timetable[child]
+            heapq.heappush(comp_events, (max(expected_time, comm_time), 1, child))
+        cur_time = comm_time
+      else:
+        heapq.heappop(comp_events)
+        assert comp_type in (0, 1)
+        if comp_type == 0:
+          for task in to_transfer:
+            effective_speed = min(link_bandwidth[link] / (link_usage[link] + 1) for link in task_to_links[task])
+            to_transfer[task] -= (comp_time - cur_time) * effective_speed
+          for child in comp_task.children:
+            if not self._transfer_tasks.get(child):
+              continue  # this task have not been scheduled yet
+            to_transfer[child] = child.amount
+            for link in task_to_links[child]:
+              link_usage[link] += 1
+          cur_time = comp_time
+        elif comp_type == 1:
+          self._shift_schedule(self._task_states[comp_task]['host'], comp_task, comp_time)
+
+  def _shift_schedule(self, host, task, start_time):
+    tasks = [
+      ((task, start_time, start_time+self._task_states[task]['eet']) if (t[0] == task and t[1] < start_time) else t)
+      for t in self._timetable[host]
+    ]
+    self._timetable[host] = []
+    for task, start_time, finish_time in tasks:
+      pos, start, finish = timesheet_insertion(self._timetable[host], host.cores, start_time, finish_time-start_time)
+      self.update(task, host, pos, start, finish)
+
+
+  def __shift_schedule_2(self, host, task, start_time):
+    raise NotImplementedError('It can be finished, but for now we just reuse timesheet_insertion method')
+
+    timesheet = self._timetable[host]
+    beginnings = [(task[1], 1, task[0]) for task in timesheet]
+    finishes = [(task[2], 0, task[0]) for task in timesheet]
+    events = sorted(finishes + beginnings)
+    available_cores = host.cores
+
+    task_pos = [i for (i, t) in enumerate(timesheet) if t[0] == task][0]
+    if start_time <= timesheet[task_pos][1]:
+      return
+    timesheet[task_pos] = (task, start_time, start_time+self._task_states[task]['eet'])
+
+    finishes = []
+    idx = 0
+    cur_time = 0
+    while finishes or idx < len(timesheet):
+      next_start = None
+      next_finish = None
+      if finishes:
+        next_finish = finishes[0][1]
+      if available_cores and idx < len(timesheet):
+        next_start = timesheet[idx][1]
+      if next_start is not None and (next_finish is None or next_start < next_finish):
+        next_task = timesheet[idx][0]
+        self._task_states[next_task]['est'] = next_start
+        self._task_states[next_task]['ect'] = next_start + self._task_states[next_task]['eet']
+        heapq.heappush(finishes, (next_start+next_finish))
+        available_cores -= 1
+        idx += 1
+        cur_time = next_start
+      else:
+        heapq.heappop(finishes)
+        next_task = finishes[0][0]
+        cur_time = next_finish
+
 
   def copy(self):
     """
@@ -339,7 +472,17 @@ class SchedulerState(object):
     links = {link for link in self._links}
     transfer_tasks = {task: value for (task, value) in self._transfer_tasks.items()}
     cached_transfers = {k1: {k2: v2 for (k2, v2) in v1.items()} for (k1, v1) in self._cached_transfers.items()}
-    return SchedulerState(task_states=task_states, timetable=timetable, links=links, transfer_tasks=transfer_tasks, cached_transfers=cached_transfers)
+    hosts = self._hosts  # is not modifiable
+    tasks = [t for t in self._tasks]
+    return SchedulerState(
+      task_states=task_states,
+      timetable=timetable,
+      links=links,
+      transfer_tasks=transfer_tasks,
+      cached_transfers=cached_transfers,
+      hosts=hosts,
+      tasks=tasks,
+    )
 
   @property
   def task_states(self):
@@ -409,10 +552,19 @@ class SchedulerState(object):
     # update task state
     task_state = self._task_states[task]
     timesheet = self._timetable[host]
+    task_state["est"] = start
+    task_state["eet"] = finish - start
     task_state["ect"] = finish
     task_state["host"] = host
     # update timesheet
     timesheet.insert(pos, (task, start, finish))
+
+  def remove_transfer(self, task):
+    if task.kind != csimdag.TASK_KIND_COMM_E2E:
+      raise ValueError("Task's type should be TASK_KIND_COMM_E2E")
+    del self.transfer_tasks[task]
+    del self.transfer_task_by_name[task.name]
+    self._tasks = [t for t in self._tasks if t != task]
 
 
 def is_master_host(host):
@@ -466,10 +618,10 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
       pos, start, finish = timesheet_insertion(timesheet, host.cores, est, eet)
       current_min.update((finish, host.speed, host.name), (host, pos, start, finish, cached_tasks, transfer_finishes))
     host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
+    state.update(task, host, pos, start, finish)
+    new_transfers = []
     if data_transfer_mode == 'EAGER_CACHING':
       for parent, edge in nxgraph.pred[task].items():
-        transfer_start_time = state._task_states[parent]['ect']
-        transfer_src_host = state._task_states[parent]['host']
         transfer_task = state._transfer_task_by_name[edge['name']]
         state.cached_transfers.setdefault(transfer_task.parents[0].name, {})
         cached_hosts = state.cached_transfers[transfer_task.parents[0].name]
@@ -477,8 +629,7 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
           _, old_transfer = state.cached_transfers[parent.name][host.name]
           assert len(transfer_task.parents) == 1
           if not is_simulated:
-            del state.transfer_tasks[transfer_task]
-            del state.transfer_task_by_name[transfer_task.name]
+            state.remove_transfer(transfer_task)
             simulation.remove_dependency(transfer_task.parents[0], transfer_task)
             simulation.remove_dependency(transfer_task, task)
             simulation.remove_task(transfer_task)
@@ -490,14 +641,21 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
         else:
           if not cached_hosts.get(host.name) or cached_hosts[host.name][0] > transfer_finishes[transfer_task.name]:
             cached_hosts[host.name] = (transfer_finishes[transfer_task.name], transfer_task)
-          state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
+          new_transfers.append({
+            'task': transfer_task,
+            'start_time': state._task_states[parent]['ect'],
+            'src': state._task_states[parent]['host'],
+            'dst': host,
+          })
     else:
       for parent, edge in nxgraph.pred[task].items():
-        transfer_start_time = state._task_states[parent]['ect']
-        transfer_src_host = state._task_states[parent]['host']
-        transfer_task = state._transfer_task_by_name[edge['name']]
-        state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
-    state.update(task, host, pos, start, finish)
+        new_transfers.append({
+          'task': state._transfer_task_by_name[edge['name']],
+          'start_time': state._task_states[parent]['ect'],
+          'src': state._task_states[parent]['host'],
+          'dst': host,
+        })
+    state.update_schedule_for_transfers(new_transfers)
   return state
 
 def timesheet_insertion(timesheet, cores, est, eet):

@@ -17,8 +17,8 @@
 #
 
 from .. import scheduler
-# from ... import scheduling as cscheduling
-from ... import cscheduling
+from ... import scheduling as cscheduling
+# from ... import cscheduling
 
 
 class EHEFT(scheduler.StaticScheduler):

@@ -16,7 +16,8 @@
 # along with this library.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-from ... import cscheduling
+# from ... import cscheduling
+from ... import scheduling as cscheduling
 from .. import scheduler
 
 
@@ -47,24 +48,32 @@ class EnhancedLookahead(scheduler.StaticScheduler):
           raise NotImplementedError('Enhanced Lookahead cannot yet work in {} mode'.format(data_transfer_mode))
         eet = platform_model.eet(task, host)
         pos, start, finish = cscheduling.timesheet_insertion(timesheet, host.cores, est, eet)
+        new_transfers = []
         if data_transfer_mode == 'EAGER_CACHING':
           for parent, edge in nxgraph.pred[task].items():
-            transfer_start_time = temp_state.task_states[parent]['ect']
-            transfer_src_host = temp_state.task_states[parent]['host']
             transfer_task = temp_state.transfer_task_by_name[edge['name']]
             temp_state.cached_transfers.setdefault(transfer_task.parents[0].name, {})
             cached_hosts = temp_state.cached_transfers[transfer_task.parents[0].name]
             if edge['name'] not in cached_tasks:
               if not cached_hosts.get(host.name) or cached_hosts[host.name][0] > transfer_finishes[transfer_task.name]:
                 cached_hosts[host.name] = (transfer_finishes[transfer_task.name], transfer_task)
-              temp_state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
+              new_transfers.append({
+                'task': transfer_task,
+                'start_time': temp_state._task_states[parent]['ect'],
+                'src': temp_state._task_states[parent]['host'],
+                'dst': host,
+              })
         else:
           for parent, edge in nxgraph.pred[task].items():
-            transfer_start_time = temp_state.task_states[parent]['ect']
-            transfer_src_host = temp_state.task_states[parent]['host']
             transfer_task = temp_state.transfer_task_by_name[edge['name']]
-            temp_state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
+            new_transfers.append({
+              'task': transfer_task,
+              'start_time': temp_state._task_states[parent]['ect'],
+              'src': temp_state._task_states[parent]['host'],
+              'dst': host,
+            })
         temp_state.update(task, host, pos, start, finish)
+        temp_state.update_schedule_for_transfers(new_transfers)
         cscheduling.enhanced_heft_schedule(simulation, nxgraph, platform_model, temp_state, ordered_tasks[(idx + 1):],
                                   self._data_transfer_mode.name, 1)
         total_time = max([state["ect"] for state in temp_state.task_states.values()])
@@ -74,18 +83,16 @@ class EnhancedLookahead(scheduler.StaticScheduler):
         #  if equal - sort by host name (guaranteed to be unique)
         current_min.update((total_time, host.speed, host.name), (host, pos, start, finish, cached_tasks, transfer_finishes))
       host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
+      new_transfers = []
       if data_transfer_mode == 'EAGER_CACHING':
         for parent, edge in nxgraph.pred[task].items():
-          transfer_start_time = state.task_states[parent]['ect']
-          transfer_src_host = state.task_states[parent]['host']
           transfer_task = state.transfer_task_by_name[edge['name']]
           state.cached_transfers.setdefault(transfer_task.parents[0].name, {})
           cached_hosts = state.cached_transfers[transfer_task.parents[0].name]
           if edge['name'] in cached_tasks:
             _, old_transfer = state.cached_transfers[parent.name][host.name]
             assert len(transfer_task.parents) == 1
-            del state.transfer_tasks[transfer_task]
-            del state.transfer_task_by_name[transfer_task.name]
+            state.remove_transfer(transfer_task)
             assert old_transfer != transfer_task, 'Task {} tries to replace {} with itself on host {}'.format(task.name, transfer_task.name, host.name)
             simulation.remove_dependency(transfer_task.parents[0], transfer_task)
             simulation.remove_dependency(transfer_task, task)
@@ -98,14 +105,23 @@ class EnhancedLookahead(scheduler.StaticScheduler):
           else:
             if not cached_hosts.get(host.name) or cached_hosts[host.name][0] > transfer_finishes[transfer_task.name]:
               cached_hosts[host.name] = (transfer_finishes[transfer_task.name], transfer_task)
-            state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
+            new_transfers.append({
+              'task': transfer_task,
+              'start_time': state._task_states[parent]['ect'],
+              'src': state._task_states[parent]['host'],
+              'dst': host,
+            })
       else:
         for parent, edge in nxgraph.pred[task].items():
-          transfer_start_time = state.task_states[parent]['ect']
-          transfer_src_host = state.task_states[parent]['host']
           transfer_task = state.transfer_task_by_name[edge['name']]
-          state.update_schedule_for_transfer(transfer_task, transfer_start_time, transfer_src_host, host)
+          new_transfers.append({
+            'task': transfer_task,
+            'start_time': state._task_states[parent]['ect'],
+            'src': state._task_states[parent]['host'],
+            'dst': host,
+          })
       state.update(task, host, pos, start, finish)
+      state.update_schedule_for_transfers(new_transfers)
 
     # store ECT in tasks for QUEUE_ECT data transfer mode
     for task, task_state in state.task_states.items():
