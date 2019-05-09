@@ -400,6 +400,8 @@ class SchedulerState(object):
           for child in comp_task.children:
             if not self._transfer_tasks.get(child):
               continue  # this task have not been scheduled yet
+            old_info = self._transfer_tasks[child]
+            self._transfer_tasks[child] = (comp_time, old_info[1], old_info[2])
             to_transfer[child] = child.amount
             for link in task_to_links[child]:
               link_usage[link] += 1
