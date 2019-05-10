@@ -148,12 +148,12 @@ def compute_weights(graph, mindata, maxdata, ccr, scatter_gather=False):
     for node in graph:
         if node in ["root", "end"]:
             continue
-        input_size = random.uniform(mindata, maxdata)
+        output_size = random.uniform(mindata, maxdata)
         num_parents = len(graph.pred[node].values())
-        edge_size = input_size / num_parents
-        for edge in graph.pred[node].values():
+        edge_size = output_size / num_parents
+        for edge in graph.succ[node].values():
             edge["weight"] = edge_size
-        graph.node[node]["weight"] = input_size / ccr
+        graph.node[node]["weight"] = output_size / ccr
     if not scatter_gather:
         # root -> x edges are effectively zero
         for edge in graph.succ["root"].values():
@@ -202,9 +202,9 @@ def main():
     parser.add_argument("--jump", type=int, nargs="*", default=[2],
                         help="max amount of levels to skip with a connection")
     parser.add_argument("--mindata", type=float, nargs="*", default=[1e6],
-                        help="min task input size in bytes")
+                        help="min task output size in bytes")
     parser.add_argument("--maxdata", type=float, nargs="*", default=[1e9],
-                        help="max task input size in bytes")
+                        help="max task output size in bytes")
     parser.add_argument("--ccr", type=float, nargs="*", default=[1.],
                         help="communication-to-computation ratio in MBs/Gflops")
     parser.add_argument("--repeat", type=int, default=1,
