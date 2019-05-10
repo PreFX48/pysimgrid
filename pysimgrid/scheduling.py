@@ -402,6 +402,7 @@ class SchedulerState(object):
               continue  # this task have not been scheduled yet
             old_info = self._transfer_tasks[child]
             assert self._transfer_tasks.get(child)
+            import ipdb; ipdb.set_trace(context=9)
             self._transfer_tasks[child] = (comp_time, old_info[1], old_info[2])
             to_transfer[child] = child.amount
             for link in task_to_links[child]:
