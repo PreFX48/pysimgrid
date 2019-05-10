@@ -392,6 +392,7 @@ class SchedulerState(object):
             heapq.heappush(comp_events, (max(expected_time, comm_time), 1, child))
         cur_time = comm_time
       else:
+        print('FINISH {}'.format(comp_task))
         heapq.heappop(comp_events)
         assert comp_type in (0, 1)
         if comp_type == 0:
