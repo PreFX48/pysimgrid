@@ -402,6 +402,7 @@ class SchedulerState(object):
               continue  # this task have not been scheduled yet
             old_info = self._transfer_tasks[child]
             assert self._transfer_tasks.get(child)
+            print(old_info[1].name)
             if old_info[1].name != 'master':
               import ipdb; ipdb.set_trace(context=9)
             self._transfer_tasks[child] = (comp_time, old_info[1], old_info[2])
