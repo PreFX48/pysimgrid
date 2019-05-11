@@ -211,9 +211,6 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
         if host1 == host2:
             return 0, False
         elif (task.parents[0], host2) in self._cached_tasks:
-            self._simulation.remove_dependency(task.parents[0], task)
-            self._simulation.remove_dependency(task, task.children[0])
-            self._simulation.remove_task(task)
             return 0, True
         else:
             min_bandwidth = None
