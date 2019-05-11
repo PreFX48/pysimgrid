@@ -118,6 +118,7 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
         clock = simulation.clock
 
         available_cores = {host: host.cores for host in self._exec_hosts}
+        tasks_to_remove = []
 
         for task in simulation.tasks[
             csimdag.TaskState.TASK_STATE_RUNNING,
@@ -178,11 +179,11 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
             host_ests[host].sort()
 
             if available_cores[host]:
-                for transfer in list(cached_tasks[(task, host)]):
+                for transfer in cached_tasks[(task, host)]:
                     print('TRANSFER {}, parents={}'.format(transfer, transfer.parents))
                     simulation.remove_dependency(transfer.parents[0], transfer)
                     simulation.remove_dependency(transfer, task)
-                    simulation.remove_task(transfer)
+                    tasks_to_remove.append(transfer)
                 task.schedule(host)
                 host.data['est'][task] = ect
                 available_cores[host] -= 1
@@ -192,6 +193,9 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
             task_idx = np.delete(task_idx, t)
             ECT = np.delete(ECT, t, 0)
             ECT[:,h] += host_ests[host][0] - old_est
+
+        for task in tasks_to_remove:
+            simulation.remove_task(task)
 
     def get_ect(self, est, clock, task, host):
         # In reference implementation here was caching, but it's no longer possible
