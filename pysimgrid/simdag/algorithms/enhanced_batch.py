@@ -209,7 +209,7 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
     def get_ecomt(self, task, host1, host2):
         if host1 == host2:
             return 0, False
-        elif (self._simulation._data_transfer_mode == scheduler.DataTransferMode.LAZY_CACHING and
+        elif (self._data_transfer_mode == scheduler.DataTransferMode.LAZY_CACHING and
               (task.parents[0], host2) in self._cached_tasks):
             return 0, True
         else:
