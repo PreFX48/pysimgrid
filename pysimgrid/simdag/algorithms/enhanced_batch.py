@@ -180,10 +180,12 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
 
             if available_cores[host]:
                 for transfer in cached_tasks[(task, host)]:
-                    print('TRANSFER {}, parents={}'.format(transfer, transfer.parents))
+                    print('CACHING {}, parent={}'.format(transfer, transfer.parents[0]))
                     simulation.remove_dependency(transfer.parents[0], transfer)
                     simulation.remove_dependency(transfer, task)
                     tasks_to_remove.append(transfer)
+                if not cached_tasks[(task, host)]:
+                    print('NO CACHE')
                 task.schedule(host)
                 host.data['est'][task] = ect
                 available_cores[host] -= 1
