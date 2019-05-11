@@ -73,6 +73,12 @@ class DataTransferMode(Enum):
 
   - LAZY_PARENTS:
     Combination of LAZY and PARENTS strategies.
+
+  - EAGER_CACHING:
+    Like EAGER, but can also cache data transfers and reuse previously downloaded files if it is of help
+
+  - LAZY_CACHING:
+    LAZY, but can also cache transfers. Not implemented in static scheduler yet, used only in EnhancedBatch
   """
   EAGER = 1
   LAZY = 2
@@ -82,6 +88,7 @@ class DataTransferMode(Enum):
   PARENTS = 6
   LAZY_PARENTS = 7
   EAGER_CACHING = 8
+  LAZY_CACHING = 9
 
 
 class Scheduler(six.with_metaclass(abc.ABCMeta)):

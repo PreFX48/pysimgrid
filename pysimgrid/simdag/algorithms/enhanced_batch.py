@@ -180,12 +180,9 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
 
             if available_cores[host]:
                 for transfer in cached_tasks[(task, host)]:
-                    print('CACHING {}, parent={}'.format(transfer, transfer.parents[0]))
                     simulation.remove_dependency(transfer.parents[0], transfer)
                     simulation.remove_dependency(transfer, task)
                     tasks_to_remove.append(transfer)
-                if not cached_tasks[(task, host)]:
-                    print('NO CACHE')
                 task.schedule(host)
                 host.data['est'][task] = ect
                 available_cores[host] -= 1
@@ -212,7 +209,8 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
     def get_ecomt(self, task, host1, host2):
         if host1 == host2:
             return 0, False
-        elif (task.parents[0], host2) in self._cached_tasks:
+        elif (self._simulation._data_transfer_mode == scheduler.DataTransferMode.LAZY_CACHING and
+              (task.parents[0], host2) in self._cached_tasks):
             return 0, True
         else:
             min_bandwidth = None
