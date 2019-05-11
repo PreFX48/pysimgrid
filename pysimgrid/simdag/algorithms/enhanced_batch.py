@@ -92,6 +92,7 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
                 for link in cplatform.route(h1, h2):
                     links.add(link)
         self._link_transmissions = {link: 0 for link in links}
+        self._cached_tasks = {}
         self._first_iteration = True
 
     def schedule(self, simulation, changed):
@@ -100,6 +101,8 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
             if task.kind == csimdag.TASK_KIND_COMM_E2E:
                 if len(task.hosts) == 1:
                     continue
+                if task.state == csimdag.TASK_STATE_DONE:
+                    self._cached_tasks[(task.parents[0], task.hosts[1])] = task
                 route = cplatform.route(task.hosts[0], task.hosts[1])
                 for link in route:
                     if task.state == csimdag.TASK_STATE_RUNNING:
@@ -137,10 +140,11 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
 
         # build ECT matrix
         ECT = np.zeros((num_tasks, len(self._exec_hosts)))
+        cached_tasks = {}
         for t, task in enumerate(tasks):
             for h, host in enumerate(self._exec_hosts):
                 best_est = host_ests[host][0] if host_ests[host] else 0
-                ECT[t][h] = self.get_ect(best_est, clock, task, host)
+                ECT[t][h], cached_tasks[(t, h)] = self.get_ect(best_est, clock, task, host)
 
         # build schedule
         task_idx = np.arange(num_tasks)
@@ -174,8 +178,11 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
             host_ests[host].sort()
 
             if available_cores[host]:
+                for transfer in list(cached_tasks[(task, host)]):
+                    self._simulation.remove_dependency(transfer.parents[0], transfer)
+                    self._simulation.remove_dependency(transfer, task)
+                    self._simulation.remove_task(transfer)
                 task.schedule(host)
-                # logging.info("%s -> %s" % (task.name, host.name))
                 host.data['est'][task] = ect
                 available_cores[host] -= 1
                 if not any(available_cores.values()):
@@ -188,19 +195,27 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
     def get_ect(self, est, clock, task, host):
         # In reference implementation here was caching, but it's no longer possible
         parent_connections = [p for p in task.parents if p.kind == csimdag.TaskKind.TASK_KIND_COMM_E2E]
-        comm_times = [self.get_ecomt(conn, conn.parents[0].hosts[0], host) for conn in parent_connections]
+        communications = [self.get_ecomt(conn, conn.parents[0].hosts[0], host) for conn in parent_connections]
+        comm_times = [x[0] for x in communications]
+        cached_flags = [x[1] for x in communications]
+        cached_tasks = [task for (task, is_cached) in zip(parent_connections, cached_flags) if is_cached]
         task_time = (max(comm_times) if comm_times else 0.) + task.get_eet(host)
-        return max(est, clock) + task_time
+        return max(est, clock) + task_time, cached_tasks
 
     def get_ecomt(self, task, host1, host2):
         if host1 == host2:
-            return 0
+            return 0, False
+        elif (task.parents[0], host2) in self._cached_tasks:
+            self._simulation.remove_dependency(task.parents[0], task)
+            self._simulation.remove_dependency(task, task.children[0])
+            self._simulation.remove_task(task)
+            return 0, True
         else:
             min_bandwidth = None
             for link in cplatform.route(host1, host2):
                 bandwidth = cplatform.link_bandwidth(link) / (self._link_transmissions[link] + 1)
                 min_bandwidth = min(bandwidth, min_bandwidth) if min_bandwidth is not None else bandwidth
-            return cplatform.route_latency(host1, host2) + task.amount / min_bandwidth
+            return cplatform.route_latency(host1, host2) + task.amount / min_bandwidth, False
 
 
 
