@@ -179,6 +179,7 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
 
             if available_cores[host]:
                 for transfer in list(cached_tasks[(task, host)]):
+                    print('TRANSFER {}, parents={}'.format(transfer, transfer.parents))
                     simulation.remove_dependency(transfer.parents[0], transfer)
                     simulation.remove_dependency(transfer, task)
                     simulation.remove_task(transfer)
