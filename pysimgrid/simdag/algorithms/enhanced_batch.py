@@ -144,7 +144,7 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
         for t, task in enumerate(tasks):
             for h, host in enumerate(self._exec_hosts):
                 best_est = host_ests[host][0] if host_ests[host] else 0
-                ECT[t][h], cached_tasks[(t, h)] = self.get_ect(best_est, clock, task, host)
+                ECT[t][h], cached_tasks[(task, host)] = self.get_ect(best_est, clock, task, host)
 
         # build schedule
         task_idx = np.arange(num_tasks)
@@ -179,9 +179,9 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
 
             if available_cores[host]:
                 for transfer in list(cached_tasks[(task, host)]):
-                    self._simulation.remove_dependency(transfer.parents[0], transfer)
-                    self._simulation.remove_dependency(transfer, task)
-                    self._simulation.remove_task(transfer)
+                    simulation.remove_dependency(transfer.parents[0], transfer)
+                    simulation.remove_dependency(transfer, task)
+                    simulation.remove_task(transfer)
                 task.schedule(host)
                 host.data['est'][task] = ect
                 available_cores[host] -= 1
