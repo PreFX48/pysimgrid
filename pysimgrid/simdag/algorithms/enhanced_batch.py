@@ -220,6 +220,10 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
                 min_bandwidth = min(bandwidth, min_bandwidth) if min_bandwidth is not None else bandwidth
             return cplatform.route_latency(host1, host2) + task.amount / min_bandwidth, False
 
+    @property
+    def scheduler_time(self):
+        return self.__scheduler_time
+
 
 
 class EnhancedBatchMin(EnhancedBatchScheduler):
