@@ -224,6 +224,10 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
     def scheduler_time(self):
         return self.__scheduler_time
 
+    @property
+    def total_time(self):
+        return self.__total_time
+
 
 
 class EnhancedBatchMin(EnhancedBatchScheduler):
