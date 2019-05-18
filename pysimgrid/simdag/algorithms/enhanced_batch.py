@@ -41,6 +41,7 @@ class EnhancedBatchScheduler(scheduler.DynamicScheduler):
     """
 
     def run(self):
+        print('I AM HERE')
         start_time = time.time()
         self.prepare(self._simulation)
         for t in self._simulation.tasks:
