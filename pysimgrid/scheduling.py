@@ -265,6 +265,7 @@ class SchedulerState(object):
       else:
         return 0.0, cached_tasks, transfer_finishes
 
+    print('TRANSFER_TASKS={}'.format(self._transfer_tasks))
     transfer_tasks = sorted(
       [(t, info) for (t, info) in self._transfer_tasks.items() if info is not None and info[1] != info[2]],
       key=lambda x: x[1][0]
@@ -616,6 +617,7 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
     for host, timesheet in state.timetable.items():
       if host.name == 'master':
         continue
+      print('task={}, host={}'.format(task, host))
       if data_transfer_mode == 'EAGER_CACHING':
         parents = dict(nxgraph.pred[task])
         est, cached_tasks, transfer_finishes = platform_model.enhanced_est(host, parents, state, True)
