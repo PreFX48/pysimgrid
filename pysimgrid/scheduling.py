@@ -265,7 +265,7 @@ class SchedulerState(object):
       else:
         return 0.0, cached_tasks, transfer_finishes
 
-    print('TRANSFER_TASKS={}'.format(self._transfer_tasks))
+    print('TRANSFER_TASKS={}'.format({k:v for (k, v) in self._transfer_tasks.items() if v is not None and v[1] != v[2]}))
     transfer_tasks = sorted(
       [(t, info) for (t, info) in self._transfer_tasks.items() if info is not None and info[1] != info[2]],
       key=lambda x: x[1][0]
