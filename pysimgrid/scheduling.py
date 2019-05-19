@@ -630,6 +630,9 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
     host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
     state.update(task, host, pos, start, finish)
     new_transfers = []
+    print('RESULTING HOST {}'.format(host.name))
+    for i in range(3):
+      print('='*150)
     if data_transfer_mode == 'EAGER_CACHING':
       for parent, edge in nxgraph.pred[task].items():
         transfer_task = state._transfer_task_by_name[edge['name']]
