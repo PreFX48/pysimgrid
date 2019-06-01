@@ -393,11 +393,9 @@ class SchedulerState(object):
           pending_dependencies[child] -= 1
           if pending_dependencies[child] == 0:
             expected_host, expected_time = comp_timetable[child]
-            print('PUSH {}'.format(child))
             heapq.heappush(comp_events, (max(expected_time, comm_time), 1, child))
         cur_time = comm_time
       else:
-        print('FINISH {}'.format(comp_task))
         heapq.heappop(comp_events)
         assert comp_type in (0, 1)
         if comp_type == 0:
@@ -409,9 +407,6 @@ class SchedulerState(object):
               continue  # this task have not been scheduled yet
             old_info = self._transfer_tasks[child]
             assert self._transfer_tasks.get(child)
-            print(old_info[1].name)
-            if old_info[1].name != 'master':
-              import ipdb; ipdb.set_trace(context=9)
             self._transfer_tasks[child] = (comp_time, old_info[1], old_info[2])
             to_transfer[child] = child.amount
             for link in task_to_links[child]:
