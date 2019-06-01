@@ -265,7 +265,7 @@ class SchedulerState(object):
       else:
         return 0.0, cached_tasks, transfer_finishes
 
-    if new_tasks[0]['dst'].name == 'host1':
+    if new_tasks[0]['src'].name != 'master' and new_tasks[0]['dst'].name == 'host1':
       for k, v in sorted(self._transfer_tasks.items()):
         if v is not None and v[1] != v[2]:
           print('\ttask={} info={}'.format(k, v))
