@@ -246,6 +246,8 @@ class SchedulerState(object):
       self._tasks = tasks
 
   def get_transfer_time(self, new_tasks, absolute, use_cache=False):
+    if new_tasks[0]['task'].name == 'c5' and new_tasks[0]['dst'].name == 'host1':
+      import ipdb; ipdb.set_trace(context=9)
     transfer_finishes = {}
     cached_tasks = set()
     for task in new_tasks:
