@@ -681,6 +681,7 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
       print('host={}'.format(host2.name), end=' ')
       print(sorted([(x[0].name, x[2]) for x in timesheet]))
     print('='*100)
+  print(sorted([(t, state.task_states[t]['ect']) for t in state.task_states]))
   return state
 
 def timesheet_insertion(timesheet, cores, est, eet):
