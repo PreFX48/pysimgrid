@@ -343,6 +343,9 @@ class SchedulerState(object):
     if os.environ.get('IMPROVE_SIMULATION', '0') == '0':
       return
 
+    if new_tasks[0]['task'].name == 'root->c5':
+      import ipdb; ipdb.set_trace(context=9)
+
     # task_to_links = {
     #   task: cplatform.route(task_info[1], task_info[2])
     #   for (task, task_info) in self._transfer_tasks.items()
