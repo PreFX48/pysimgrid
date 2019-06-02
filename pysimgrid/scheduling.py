@@ -335,6 +335,7 @@ class SchedulerState(object):
       cur_time = event_time
 
   def update_schedule_for_transfers(self, new_tasks):
+    print('ADD {}'.format([x['task'] for x in new_tasks]))
     # SIMULATE THE WORLD
     for task in new_tasks:
       self._transfer_tasks[task['task']] = (task['start_time'], task['src'], task['dst'])
