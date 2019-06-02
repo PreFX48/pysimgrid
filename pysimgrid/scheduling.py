@@ -246,8 +246,6 @@ class SchedulerState(object):
       self._tasks = tasks
 
   def get_transfer_time(self, new_tasks, absolute, use_cache=False):
-    if new_tasks[0]['name'] == 'root->c5' and new_tasks[0]['dst'].name == 'host1':
-      import ipdb; ipdb.set_trace(context=9)
     transfer_finishes = {}
     cached_tasks = set()
     for task in new_tasks:
@@ -292,6 +290,9 @@ class SchedulerState(object):
       results = {}
       task_to_start_time = {task['name']: task['start_time'] for task in new_tasks}
 
+    if new_tasks[0]['name'] == 'root->c5' and new_tasks[0]['dst'].name == 'host1':
+      import ipdb; ipdb.set_trace(context=9)
+    
     while True:
       selector = MinSelector()
       if transfer_tasks_idx < len(transfer_tasks):
