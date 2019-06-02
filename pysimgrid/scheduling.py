@@ -414,8 +414,11 @@ class SchedulerState(object):
             assert self._transfer_tasks.get(child)
             self._transfer_tasks[child] = (comp_time, old_info[1], old_info[2])
             to_transfer[child] = child.amount
-            for link in task_to_links[child]:
-              link_usage[link] += 1
+            try:
+              for link in task_to_links[child]:
+                link_usage[link] += 1
+            except KeyError:
+              print('COULD NOT FIND {}, dict={}'.format(child, task_to_links.keys()))
           cur_time = comp_time
         elif comp_type == 1:
           self._shift_schedule(self._task_states[comp_task]['host'], comp_task, comp_time)
@@ -637,7 +640,7 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
       if host.name == 'master':
         continue
       print('host={}'.format(host.name), end=' ')
-      print([(x[0], x[2]) for x in timesheet])
+      print([(x[0].name, x[2]) for x in timesheet])
       # for x in timesheet:
       #   print('\t{}'.format(x))
     print('='*100)
