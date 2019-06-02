@@ -335,7 +335,7 @@ class SchedulerState(object):
       cur_time = event_time
 
   def update_schedule_for_transfers(self, new_tasks):
-    print('ADD {}, NOW={}'.format([x['task'] for x in new_tasks], self._transfer_tasks.keys()))
+    print('ADD {}, NOW={}'.format([x['task']. ame for x in new_tasks], [x.name for x in self._transfer_tasks.keys()]))
     # SIMULATE THE WORLD
     for task in new_tasks:
       self._transfer_tasks[task['task']] = (task['start_time'], task['src'], task['dst'])
@@ -350,6 +350,8 @@ class SchedulerState(object):
     # }
     task_to_links = {task['task']: cplatform.route(task['src'], task['dst']) for task in new_tasks}
     for task, task_info in self._transfer_tasks.items():
+      if task.name == 'root -> c6':
+        print('TASK root -> c6: {}'.format(task_info))
       if task_info is not None and task_info[1] != task_info[2]:
         task_to_links[task] = cplatform.route(task_info[1], task_info[2])
 
