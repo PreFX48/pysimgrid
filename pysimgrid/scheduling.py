@@ -629,8 +629,6 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
     host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
     state.update(task, host, pos, start, finish)
     for host, timesheet in state.timetable.items():
-      if host.name == 'master':
-        continue
       print('host {}'.format(host.name))
       for x in timesheet:
         print('\t{}'.format(x))
