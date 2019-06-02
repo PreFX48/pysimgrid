@@ -335,7 +335,7 @@ class SchedulerState(object):
       cur_time = event_time
 
   def update_schedule_for_transfers(self, new_tasks):
-    print('ADD {}, NOW={}'.format([x['task'].name for x in new_tasks], [x.name for x in self._transfer_tasks.keys()]))
+    # print('ADD {}, NOW={}'.format([x['task'].name for x in new_tasks], [x.name for x in self._transfer_tasks.keys()]))
     # SIMULATE THE WORLD
     for task in new_tasks:
       self._transfer_tasks[task['task']] = (task['start_time'], task['src'], task['dst'])
@@ -350,8 +350,6 @@ class SchedulerState(object):
     # }
     task_to_links = {task['task']: cplatform.route(task['src'], task['dst']) for task in new_tasks}
     for task, task_info in self._transfer_tasks.items():
-      if task.name == 'root->c6':
-        print('TASK root->c6: {}'.format(task_info))
       if task_info is not None and task_info[1] != task_info[2]:
         task_to_links[task] = cplatform.route(task_info[1], task_info[2])
 
@@ -417,11 +415,8 @@ class SchedulerState(object):
             assert self._transfer_tasks.get(child)
             self._transfer_tasks[child] = (comp_time, old_info[1], old_info[2])
             to_transfer[child] = child.amount
-            try:
-              for link in task_to_links[child]:
-                link_usage[link] += 1
-            except KeyError:
-              print('COULD NOT FIND {}, dict={}'.format(child, task_to_links.keys()))
+            for link in task_to_links[child]:
+              link_usage[link] += 1
           cur_time = comp_time
         elif comp_type == 1:
           self._shift_schedule(self._task_states[comp_task]['host'], comp_task, comp_time)
@@ -680,8 +675,6 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
           })
     else:
       for parent, edge in nxgraph.pred[task].items():
-        if edge['name'] == 'root->c6':
-          print()
         new_transfers.append({
           'task': state._transfer_task_by_name[edge['name']],
           'start_time': state._task_states[parent]['ect'],
