@@ -630,8 +630,9 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
     state.update(task, host, pos, start, finish)
     for host, timesheet in state.timetable.items():
       print('host {}'.format(host.name))
-      for x in timesheet:
-        print('\t{}'.format(x))
+      print(timesheet)
+      # for x in timesheet:
+      #   print('\t{}'.format(x))
     print('='*100)
     new_transfers = []
     # print('RESULTING HOST {}'.format(host.name))
