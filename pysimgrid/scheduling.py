@@ -371,8 +371,8 @@ class SchedulerState(object):
     heapq.heappush(comp_events, (self._task_states[root]['ect'], 0, root))
     to_transfer = {}
 
-    if new_tasks[0]['task'].name == 'root->c5':
-      import ipdb; ipdb.set_trace(context=9)
+    # if new_tasks[0]['task'].name == 'root->c5':
+    #   import ipdb; ipdb.set_trace(context=9)
 
     cur_time = None  # will be filled at the first iteration
     while comp_events or to_transfer:
