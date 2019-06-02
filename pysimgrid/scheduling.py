@@ -639,10 +639,10 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
       current_min.update((finish, host.speed, host.name), (host, pos, start, finish, cached_tasks, transfer_finishes))
     host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
     state.update(task, host, pos, start, finish)
-    for host, timesheet in state.timetable.items():
-      if host.name == 'master':
+    for host2, timesheet in state.timetable.items():
+      if host2.name == 'master':
         continue
-      print('host={}'.format(host.name), end=' ')
+      print('host={}'.format(host2.name), end=' ')
       print(sorted([(x[0].name, x[2]) for x in timesheet]))
       # for x in timesheet:
       #   print('\t{}'.format(x))
@@ -680,6 +680,8 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
           })
     else:
       for parent, edge in nxgraph.pred[task].items():
+        if edge['name'] == 'root->c6':
+          print()
         new_transfers.append({
           'task': state._transfer_task_by_name[edge['name']],
           'start_time': state._task_states[parent]['ect'],
