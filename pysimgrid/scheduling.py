@@ -643,7 +643,7 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
       if host.name == 'master':
         continue
       print('host={}'.format(host.name), end=' ')
-      print([(x[0].name, x[2]) for x in timesheet])
+      print(sorted([(x[0].name, x[2]) for x in timesheet]))
       # for x in timesheet:
       #   print('\t{}'.format(x))
     print('='*100)
