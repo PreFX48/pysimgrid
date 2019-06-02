@@ -347,10 +347,10 @@ class SchedulerState(object):
     #   for (task, task_info) in self._transfer_tasks.items()
     #   if task_info is not None and task_info[1] != task_info[2]
     # }
-    task_to_links = {task['name']: cplatform.route(task['src'], task['dst']) for task in new_tasks}
+    task_to_links = {task['task']: cplatform.route(task['src'], task['dst']) for task in new_tasks}
     for task, task_info in self._transfer_tasks.items():
       if task_info is not None and task_info[1] != task_info[2]:
-        task_to_links[task.name] = cplatform.route(task_info[1], task_info[2])
+        task_to_links[task] = cplatform.route(task_info[1], task_info[2])
 
     comp_timetable = {}
     for host, timesheet in self._timetable.items():
