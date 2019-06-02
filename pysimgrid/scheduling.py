@@ -292,14 +292,14 @@ class SchedulerState(object):
 
     if new_tasks[0]['name'] == 'root->c5' and new_tasks[0]['dst'].name == 'host1':
       import ipdb; ipdb.set_trace(context=9)
-    
+
     while True:
       selector = MinSelector()
       if transfer_tasks_idx < len(transfer_tasks):
         task, task_info = transfer_tasks[transfer_tasks_idx]
         selector.update((task_info[0],), (task.name, 'scheduled_task', task.amount))
       for task, amount_left in to_transfer.items():
-        effective_speed = min(link_bandwidth[link] / (link_usage[link]+1) for link in task_to_links[task])
+        effective_speed = min(link_bandwidth[link] / link_usage[link] for link in task_to_links[task])
         eta = amount_left / effective_speed
         selector.update((cur_time + eta,), (task, 'finished_task', 0))
       for task in new_tasks:
@@ -325,7 +325,7 @@ class SchedulerState(object):
           return max(results), cached_tasks, transfer_finishes
 
       for task in to_transfer:
-        effective_speed = min(link_bandwidth[link] / (link_usage[link]+1) for link in task_to_links[task])
+        effective_speed = min(link_bandwidth[link] / link_usage[link] for link in task_to_links[task])
         to_transfer[task] -= (event_time - cur_time) * effective_speed
       if event_type == 'scheduled_task':
         for link in task_to_links[affected_task]:
