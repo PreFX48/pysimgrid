@@ -265,10 +265,10 @@ class SchedulerState(object):
       else:
         return 0.0, cached_tasks, transfer_finishes
 
-    if new_tasks[0]['src'].name != 'master' and new_tasks[0]['dst'].name == 'host1':
-      for k, v in sorted(self._transfer_tasks.items()):
-        if v is not None and v[1] != v[2]:
-          print('\ttask={} info={}'.format(k, v))
+    # if new_tasks[0]['src'].name != 'master' and new_tasks[0]['dst'].name == 'host1':
+    #   for k, v in sorted(self._transfer_tasks.items()):
+    #     if v is not None and v[1] != v[2]:
+    #       print('\ttask={} info={}'.format(k, v))
 
     transfer_tasks = sorted(
       [(t, info) for (t, info) in self._transfer_tasks.items() if info is not None and info[1] != info[2]],
@@ -616,7 +616,7 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
     for host, timesheet in state.timetable.items():
       if host.name == 'master':
         continue
-      print('task={}, host={}'.format(task, host))
+      # print('task={}, host={}'.format(task, host))
       if data_transfer_mode == 'EAGER_CACHING':
         parents = dict(nxgraph.pred[task])
         est, cached_tasks, transfer_finishes = platform_model.enhanced_est(host, parents, state, True)
@@ -629,9 +629,9 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
     host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
     state.update(task, host, pos, start, finish)
     new_transfers = []
-    print('RESULTING HOST {}'.format(host.name))
-    for i in range(3):
-      print('='*150)
+    # print('RESULTING HOST {}'.format(host.name))
+    # for i in range(3):
+    #   print('='*150)
     if data_transfer_mode == 'EAGER_CACHING':
       for parent, edge in nxgraph.pred[task].items():
         transfer_task = state._transfer_task_by_name[edge['name']]
