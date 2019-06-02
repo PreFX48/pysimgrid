@@ -290,9 +290,6 @@ class SchedulerState(object):
       results = {}
       task_to_start_time = {task['name']: task['start_time'] for task in new_tasks}
 
-    if new_tasks[0]['name'] == 'root->c5' and new_tasks[0]['dst'].name == 'host1':
-      import ipdb; ipdb.set_trace(context=9)
-
     while True:
       selector = MinSelector()
       if transfer_tasks_idx < len(transfer_tasks):
@@ -382,7 +379,7 @@ class SchedulerState(object):
       if to_transfer:
         selector = MinSelector()
         for task, amount_left in to_transfer.items():
-          effective_speed = min(link_bandwidth[link] / (link_usage[link] + 1) for link in task_to_links[task])
+          effective_speed = min(link_bandwidth[link] / link_usage[link] for link in task_to_links[task])
           eta = amount_left / effective_speed
           assert cur_time is not None
           selector.update((cur_time + eta,), (task,))
@@ -393,7 +390,7 @@ class SchedulerState(object):
 
       if comm_time is not None and (comp_time is None or comm_time <= comp_time):
         for task in to_transfer:
-          effective_speed = min(link_bandwidth[link] / (link_usage[link] + 1) for link in task_to_links[task])
+          effective_speed = min(link_bandwidth[link] / link_usage[link] for link in task_to_links[task])
           to_transfer[task] -= (comm_time - cur_time) * effective_speed
         for link in task_to_links[comm_task]:
           link_usage[link] -= 1
@@ -409,7 +406,7 @@ class SchedulerState(object):
         assert comp_type in (0, 1)
         if comp_type == 0:
           for task in to_transfer:
-            effective_speed = min(link_bandwidth[link] / (link_usage[link] + 1) for link in task_to_links[task])
+            effective_speed = min(link_bandwidth[link] / link_usage[link] for link in task_to_links[task])
             to_transfer[task] -= (comp_time - cur_time) * effective_speed
           for child in comp_task.children:
             if not self._transfer_tasks.get(child):
