@@ -343,8 +343,6 @@ class SchedulerState(object):
     if os.environ.get('IMPROVE_SIMULATION', '0') == '0':
       return
 
-    if new_tasks[0]['task'].name == 'root->c5':
-      import ipdb; ipdb.set_trace(context=9)
 
     # task_to_links = {
     #   task: cplatform.route(task_info[1], task_info[2])
@@ -372,6 +370,9 @@ class SchedulerState(object):
     comp_events = []
     heapq.heappush(comp_events, (self._task_states[root]['ect'], 0, root))
     to_transfer = {}
+
+    if new_tasks[0]['task'].name == 'root->c5':
+      import ipdb; ipdb.set_trace(context=9)
 
     cur_time = None  # will be filled at the first iteration
     while comp_events or to_transfer:
