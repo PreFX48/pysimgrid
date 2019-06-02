@@ -371,9 +371,6 @@ class SchedulerState(object):
     heapq.heappush(comp_events, (self._task_states[root]['ect'], 0, root))
     to_transfer = {}
 
-    # if new_tasks[0]['task'].name == 'root->c5':
-    #   import ipdb; ipdb.set_trace(context=9)
-
     cur_time = None  # will be filled at the first iteration
     while comp_events or to_transfer:
       if comp_events:
@@ -638,14 +635,6 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
       current_min.update((finish, host.speed, host.name), (host, pos, start, finish, cached_tasks, transfer_finishes))
     host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
     state.update(task, host, pos, start, finish)
-    for host2, timesheet in state.timetable.items():
-      if host2.name == 'master':
-        continue
-      print('host={}'.format(host2.name), end=' ')
-      print(sorted([(x[0].name, x[2]) for x in timesheet]))
-      # for x in timesheet:
-      #   print('\t{}'.format(x))
-    print('='*100)
     new_transfers = []
     # print('RESULTING HOST {}'.format(host.name))
     # for i in range(3):
@@ -686,6 +675,12 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
           'dst': host,
         })
     state.update_schedule_for_transfers(new_transfers)
+    for host2, timesheet in state.timetable.items():
+      if host2.name == 'master':
+        continue
+      print('host={}'.format(host2.name), end=' ')
+      print(sorted([(x[0].name, x[2]) for x in timesheet]))
+    print('='*100)
   return state
 
 def timesheet_insertion(timesheet, cores, est, eet):
