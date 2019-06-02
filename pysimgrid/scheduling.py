@@ -628,7 +628,10 @@ def enhanced_heft_schedule(simulation, nxgraph, platform_model, state, ordered_t
       current_min.update((finish, host.speed, host.name), (host, pos, start, finish, cached_tasks, transfer_finishes))
     host, pos, start, finish, cached_tasks, transfer_finishes = current_min.value
     state.update(task, host, pos, start, finish)
+    import ipdb; ipdb.set_trace(context=9)
     for host, timesheet in state.timetable.items():
+      if host.name == 'master':
+        continue
       print('host {}'.format(host.name))
       print(timesheet)
       # for x in timesheet:
